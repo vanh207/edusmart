@@ -53,3 +53,6 @@ Edusmart/
 publish/
 *.exe
 *.rar
+serviceAccountKey.json
+*.json.local
+firebaseAdmin.js.local
