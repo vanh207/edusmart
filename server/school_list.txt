@@ -1,0 +1,24 @@
+[
+  {
+    "id": 1,
+    "district_id": null,
+    "name": "THPT SƠN NAM",
+    "levels": "thpt",
+    "province": "Tuyên Quang",
+    "district": "Sơn Dương",
+    "ward": null,
+    "address": "Sơn Nam",
+    "code": null
+  },
+  {
+    "id": 2,
+    "district_id": null,
+    "name": "THCS NINH LAI ",
+    "levels": "thcs",
+    "province": "Tuyên Quang",
+    "district": "Sơn Dương",
+    "ward": null,
+    "address": "Xã Sơn Thủy",
+    "code": null
+  }
+]

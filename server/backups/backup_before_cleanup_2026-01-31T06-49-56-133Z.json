@@ -1,0 +1,203 @@
+{
+  "timestamp": "2026-01-31T06:49:56.139Z",
+  "lessons": [
+    {
+      "id": 1,
+      "title": "ádfgdag",
+      "content": "adsfggfd",
+      "subject": "anh",
+      "grade_level": "thcs_6",
+      "file_path": null,
+      "file_type": null,
+      "created_at": "2026-01-20 13:22:04",
+      "ai_proctoring": 0,
+      "material_type": null,
+      "material_link": null,
+      "school_id": null
+    }
+  ],
+  "exercises": [
+    {
+      "id": 1,
+      "lesson_id": null,
+      "title": "sdfgfdg",
+      "subject": "anh",
+      "grade_level": "thcs_6",
+      "total_questions": 2,
+      "total_points": 20,
+      "description": null,
+      "duration": 15,
+      "max_attempts": 0,
+      "created_at": "2026-01-20 13:21:38",
+      "file_path": null,
+      "file_type": null,
+      "school_id": null
+    },
+    {
+      "id": 2,
+      "lesson_id": null,
+      "title": "sfsdfsd",
+      "subject": "anh",
+      "grade_level": "thcs_6",
+      "total_questions": 1,
+      "total_points": 10,
+      "description": null,
+      "duration": 45,
+      "max_attempts": 0,
+      "created_at": "2026-01-30 13:35:36",
+      "file_path": null,
+      "file_type": null,
+      "school_id": 1
+    }
+  ],
+  "vocabulary": [
+    {
+      "id": 1,
+      "word": "name",
+      "meaning": "tên",
+      "pronunciation": "name",
+      "example": "sfsdfdrg",
+      "subject": "anh",
+      "grade_level": "thcs_6",
+      "type": "speaking",
+      "created_at": "2026-01-20 13:20:32",
+      "school_id": null
+    },
+    {
+      "id": 2,
+      "word": "name",
+      "meaning": "tên",
+      "pronunciation": "name",
+      "example": "dsfsdf",
+      "subject": "anh",
+      "grade_level": "thcs_6",
+      "type": "writing",
+      "created_at": "2026-01-20 13:20:49",
+      "school_id": null
+    },
+    {
+      "id": 3,
+      "word": "name",
+      "meaning": "name",
+      "pronunciation": "name",
+      "example": null,
+      "subject": "anh",
+      "grade_level": "thcs_6",
+      "type": "speaking",
+      "created_at": "2026-01-30 13:42:58",
+      "school_id": 1
+    },
+    {
+      "id": 4,
+      "word": "what your name",
+      "meaning": "what your name",
+      "pronunciation": "what your name",
+      "example": "what your name",
+      "subject": "anh",
+      "grade_level": "thcs_6",
+      "type": "writing",
+      "created_at": "2026-01-30 13:43:21",
+      "school_id": 1
+    }
+  ],
+  "tests": [
+    {
+      "id": 1,
+      "title": "bài kiểm tra",
+      "description": "dfgihdsigh",
+      "subject": "anh",
+      "grade_level": "thcs_6",
+      "duration": 45,
+      "total_questions": 5,
+      "total_points": 100,
+      "ai_proctoring": 0,
+      "created_by": 1,
+      "created_at": "2026-01-20 13:19:27",
+      "max_attempts": 0,
+      "school_id": null
+    },
+    {
+      "id": 2,
+      "title": "fgffyuguyjgfvk",
+      "description": "ihklhklhklhkl'",
+      "subject": "anh",
+      "grade_level": "thcs_6",
+      "duration": 45,
+      "total_questions": 1,
+      "total_points": 10,
+      "ai_proctoring": 0,
+      "created_by": 162,
+      "created_at": "2026-01-29 10:57:21",
+      "max_attempts": 0,
+      "school_id": 1
+    }
+  ],
+  "test_questions": [
+    {
+      "id": 1,
+      "test_id": 1,
+      "question": "Thuộc tính CSS nào được sử dụng để chuyển đổi tất cả các chữ cái trong đoạn văn thành chữ in hoa và thiết lập khoảng cách giữa các dòng là 1.8?",
+      "options": "[\"text-style: uppercase; line-spacing: 1.8;\",\"text-transform: capitalize; line-height: 1.8;\",\"text-transform: uppercase; line-height: 1.8;\",\"font-weight: bold; line-height: 1.8;\"]",
+      "correct_answer": "text-transform: uppercase; line-height: 1.8;",
+      "points": 20,
+      "question_order": 1,
+      "type": "abcd",
+      "audio_url": null
+    },
+    {
+      "id": 2,
+      "test_id": 1,
+      "question": "Để áp dụng màu cam và kiểu chữ in nghiêng (font-style: italic) chỉ cho các đoạn văn có class là 'note' (ví dụ: <p class=\"note\">), Selector CSS nào phải được sử dụng?",
+      "options": "[\"#note\",\"p.note\",\".note\",\"p[class=\\\"note\\\"]\"]",
+      "correct_answer": ".note",
+      "points": 20,
+      "question_order": 2,
+      "type": "abcd",
+      "audio_url": null
+    },
+    {
+      "id": 3,
+      "test_id": 1,
+      "question": "Để thiết lập nền màu vàng nhạt (light yellow) và chữ màu xanh lá cây (green) cho một đoạn văn, cú pháp CSS nào dưới đây là chính xác và sử dụng hệ màu tên màu?",
+      "options": "[\"color: light yellow; background-color: green;\",\"background-color: #FFFFE0; color: rgb(0, 128, 0);\",\"background-color: yellow; color: green;\",\"color: green; background-color: lightyellow;\"]",
+      "correct_answer": "color: green; background-color: lightyellow;",
+      "points": 20,
+      "question_order": 0,
+      "type": "abcd",
+      "audio_url": null
+    },
+    {
+      "id": 4,
+      "test_id": 1,
+      "question": "Để thay đổi liên kết (link) sang màu đỏ và thêm gạch chân (underline) chỉ khi người dùng di chuột qua liên kết đó (áp dụng cho thẻ <a>), đoạn mã CSS nào sau đây là đúng?",
+      "options": "[\"a { color: red; text-decoration: underline; }\",\"a:active { color: red; text-decoration: underline; }\",\"a:focus { color: red; text-decoration: underline; }\",\"a:hover { color: red; text-decoration: underline; }\"]",
+      "correct_answer": "a:hover { color: red; text-decoration: underline; }",
+      "points": 20,
+      "question_order": 4,
+      "type": "abcd",
+      "audio_url": null
+    },
+    {
+      "id": 5,
+      "test_id": 1,
+      "question": "Cho đoạn HTML: <p id=\"demo\" class=\"text\">Hello CSS</p> và các luật CSS sau. Theo quy tắc độ ưu tiên (Specificity), đoạn chữ 'Hello CSS' sẽ hiển thị màu gì?\n\np { color: black; }\n.text { color: blue; }\n#demo { color: red; }",
+      "options": "[\"Black (vì Tag Selector được viết đầu tiên)\",\"Blue (vì Class Selector có điểm ưu tiên cao hơn Tag)\",\"Red (vì ID Selector có điểm ưu tiên cao nhất)\",\"Màu sẽ không xác định được\"]",
+      "correct_answer": "Red (vì ID Selector có điểm ưu tiên cao nhất)",
+      "points": 20,
+      "question_order": 3,
+      "type": "abcd",
+      "audio_url": null
+    },
+    {
+      "id": 7,
+      "test_id": 2,
+      "question": "545324532",
+      "options": "[\"45\",\"afsd\"]",
+      "correct_answer": "A",
+      "points": 10,
+      "question_order": 0,
+      "type": "abcd",
+      "audio_url": null
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "name": "learning-platform",
+  "version": "1.0.0",
+  "description": "Hệ thống học tập tích hợp AI cho học sinh THCS và THPT",
+  "main": "server/index.js",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:server": "cd server && nodemon index.js",
+    "dev:client": "cd client && npm run dev",
+    "build": "cd client && npm run build",
+    "start": "cd server && node index.js",
+    "install:all": "npm install && cd server && npm install && cd ../client && npm install",
+    "test:connection": "cd server && node test-connection.js"
+  },
+  "keywords": [
+    "education",
+    "learning",
+    "ai",
+    "gemini"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "dependencies": {
+    "firebase": "^12.8.0",
+    "html2canvas": "^1.4.1"
+  }
+}

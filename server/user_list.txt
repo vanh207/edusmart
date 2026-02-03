@@ -1,0 +1,50 @@
+[
+  {
+    "id": 1,
+    "username": "admin",
+    "email": null,
+    "role": "admin",
+    "password": "$2a$10$cvZD2qSRHyeLpLkqOOTKu.5Ddawtg4kG9jGBFQ4OCPR43I9ySZx8u",
+    "is_hashed": true
+  },
+  {
+    "id": 2,
+    "username": "student",
+    "email": null,
+    "role": "student",
+    "password": "$2a$10$sg2OdxeqkZWpPWmCkvpixu4KlPpPJ5OPhv36ICc4l2Yi89t9eIofG",
+    "is_hashed": true
+  },
+  {
+    "id": 9,
+    "username": "vanh",
+    "email": "vietanh282007@gmail.com",
+    "role": "student",
+    "password": "$2a$10$cIIIi9eeAdni9pMr.aaYr.aLkBrGNZLxM7jTky5u1MvV8icU7Ygm.",
+    "is_hashed": true
+  },
+  {
+    "id": 162,
+    "username": "adminn",
+    "email": null,
+    "role": "admin",
+    "password": "$2a$10$lt5.XuSiOIXH8KMvubHHD.I9NrAevynfLRwtNPyVy/Rr8DFjie6Nq",
+    "is_hashed": true
+  },
+  {
+    "id": 331,
+    "username": "adminnn",
+    "email": null,
+    "role": "admin",
+    "password": "$2a$10$P8aInVTtTfTZXSPly9x0FukSmNtSHlrS/EK4jr/rYCIdlZzQcr8Ka",
+    "is_hashed": true
+  },
+  {
+    "id": 348,
+    "username": "hien",
+    "email": "minhhiendj123@gmail.com",
+    "role": "student",
+    "password": "FIREBASE_MANAGED",
+    "is_hashed": false
+  }
+]
