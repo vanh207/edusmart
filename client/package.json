@@ -25,7 +25,8 @@
     "react-router-dom": "^6.20.1",
     "recharts": "^2.12.0",
     "socket.io-client": "^4.8.3",
-    "tailwindcss": "^3.3.6"
+    "tailwindcss": "^3.3.6",
+    "firebase": "^10.7.1"
   },
   "devDependencies": {
     "@types/canvas-confetti": "^1.6.4",
