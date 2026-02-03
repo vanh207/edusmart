@@ -1,4 +1,4 @@
-// Grades API - Thêm vào cuối file client/lib/api.ts
+import api from './api'
 
 export const gradesAPI = {
     // Teacher endpoints
