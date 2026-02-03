@@ -59,7 +59,7 @@ const app = express();
 const server = http.createServer(app);
 const allowedOrigins = [
   "http://localhost:3000",
-  process.env.CLIENT_URL,
+  ...(process.env.CLIENT_URL ? process.env.CLIENT_URL.split(',').map(s => s.trim()) : []),
 ].filter(Boolean);
 
 const io = new Server(server, {
@@ -164,6 +164,7 @@ app.use(
       if (isAllowed) {
         callback(null, true);
       } else {
+        console.warn(`[CORS] Blocked request from: ${origin}. Allowed origins are: ${allowedOrigins.join(", ")}`);
         callback(new Error("Not allowed by CORS"));
       }
     },
