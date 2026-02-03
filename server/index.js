@@ -364,7 +364,7 @@ function addColumnIfNotExists(table, column, definition, callback) {
 }
 
 // (initializeViolationTable moved to main db.serialize block)
-addColumnIfNotExists("users", "firebase_uid", "TEXT");
+// (addColumnIfNotExists "users" "firebase_uid" moved into serialize block)
 
 // Activity logging helper
 function logActivity(userId, username, action, details, schoolId = null) {
@@ -824,10 +824,19 @@ db.serialize(() => {
     FOREIGN KEY(current_class_id) REFERENCES classes(id)
   )`);
 
-  addColumnIfNotExists("users", "class_id", "INTEGER");
-  addColumnIfNotExists("users", "current_class_id", "INTEGER");
+  // Column migrations for users (only for columns NOT in CREATE TABLE)
+  addColumnIfNotExists("users", "firebase_uid", "TEXT");
   addColumnIfNotExists("users", "class_name", "TEXT");
   addColumnIfNotExists("users", "school_id", "INTEGER");
+  addColumnIfNotExists("users", "phone_number", "TEXT");
+  addColumnIfNotExists("users", "gender", "TEXT");
+  addColumnIfNotExists("users", "place_of_birth", "TEXT");
+  addColumnIfNotExists("users", "province", "TEXT");
+  addColumnIfNotExists("users", "district", "TEXT");
+  addColumnIfNotExists("users", "ward", "TEXT");
+  addColumnIfNotExists("users", "school_level", "TEXT");
+  addColumnIfNotExists("users", "ip_address", "TEXT");
+
 
   // Migration for classes uniqueness (composite unique name + school_id)
   db.get("SELECT sql FROM sqlite_master WHERE type='table' AND name='classes'", [], (err, row) => {
@@ -959,29 +968,8 @@ db.serialize(() => {
     FOREIGN KEY(achievement_id) REFERENCES achievements(id)
   )`);
 
-  // Schools table for multi-tenancy
-  db.run(`CREATE TABLE IF NOT EXISTS schools (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    code TEXT UNIQUE NOT NULL,
-    province TEXT,
-    district TEXT,
-    ward TEXT,
-    address TEXT,
-    phone TEXT,
-    email TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
-  addColumnIfNotExists("schools", "code", "TEXT", () => {
-    addColumnIfNotExists("schools", "province", "TEXT", () => {
-      addColumnIfNotExists("schools", "district", "TEXT", () => {
-        addColumnIfNotExists("schools", "ward", "TEXT", () => {
-          // Seed default school after ensuring columns exist
-          db.run(`INSERT OR IGNORE INTO schools(id, name, code, province) VALUES(1, 'Trường Mặc Định', 'DEFAULT', 'Hà Nội')`);
-        });
-      });
-    });
-  });
+  // (Schools table definition moved to downstream administrative block)
+
 
   // System Announcements
   db.run(`CREATE TABLE IF NOT EXISTS announcements(
@@ -1269,22 +1257,8 @@ u.id,
   // Remove old vocabulary file_path/file_type migrations if they exist, as the table definition changed
   // db.run(`ALTER TABLE vocabulary ADD COLUMN file_path TEXT`, (err) => { });
   // db.run(`ALTER TABLE vocabulary ADD COLUMN file_type TEXT`, (err) => { });
-  addColumnIfNotExists("users", "school", "TEXT");
-  addColumnIfNotExists("users", "birth_date", "TEXT");
-  addColumnIfNotExists("users", "avatar_url", "TEXT");
-  addColumnIfNotExists("users", "specialty", "TEXT");
-  addColumnIfNotExists("users", "qualification", "TEXT");
-  addColumnIfNotExists("users", "is_full_access", "INTEGER DEFAULT 0");
-  addColumnIfNotExists("users", "phone_number", "TEXT");
-  addColumnIfNotExists("exercises", "title", "TEXT");
-  addColumnIfNotExists("exercises", "subject", "TEXT");
-  addColumnIfNotExists("exercises", "grade_level", "TEXT");
-  addColumnIfNotExists("exercises", "total_questions", "INTEGER DEFAULT 0");
-  addColumnIfNotExists("exercises", "total_points", "INTEGER DEFAULT 0");
-  addColumnIfNotExists("exercises", "description", "TEXT");
-  addColumnIfNotExists("exercises", "duration", "INTEGER DEFAULT 30");
-  addColumnIfNotExists("test_questions", "type", "TEXT DEFAULT 'abcd'");
-  addColumnIfNotExists("test_questions", "audio_url", "TEXT");
+  // Additional migrations for other tables
+  addColumnIfNotExists("exercises", "max_attempts", "INTEGER DEFAULT 0");
   addColumnIfNotExists("exercise_questions", "audio_url", "TEXT");
   addColumnIfNotExists("test_results", "start_time", "DATETIME");
   addColumnIfNotExists("test_results", "answers", "TEXT");
@@ -1292,16 +1266,7 @@ u.id,
   addColumnIfNotExists("user_progress", "start_time", "DATETIME");
   addColumnIfNotExists("user_progress", "answers", "TEXT");
   addColumnIfNotExists("user_progress", "file_url", "TEXT");
-  addColumnIfNotExists("users", "gender", "TEXT");
-  addColumnIfNotExists("users", "place_of_birth", "TEXT");
-  addColumnIfNotExists("users", "province", "TEXT");
-  addColumnIfNotExists("users", "district", "TEXT");
-  addColumnIfNotExists("users", "ward", "TEXT");
-  addColumnIfNotExists("users", "school_level", "TEXT");
-  addColumnIfNotExists("users", "ip_address", "TEXT");
-  addColumnIfNotExists("users", "school_id", "INTEGER");
-  addColumnIfNotExists("users", "class_id", "INTEGER");
-  addColumnIfNotExists("users", "class_name", "TEXT");
+
 
   // Add school_id to all content tables for multi-tenancy
   addColumnIfNotExists("classes", "school_id", "INTEGER");
@@ -1508,56 +1473,30 @@ VALUES('student', ?, 'Student Test', 'student', 'thcs_6')`,
   db.run(
     `CREATE TABLE IF NOT EXISTS schools(
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    district_id INTEGER,
     name TEXT NOT NULL UNIQUE,
+    code TEXT UNIQUE,
     levels TEXT,
     province TEXT,
     district TEXT,
-    ward TEXT,
-    address TEXT,
-    FOREIGN KEY(district_id) REFERENCES districts(id)
-  )`,
-    (err) => {
-      if (!err) {
-        db.all("PRAGMA table_info(schools)", (err, columns) => {
-          if (err || !columns) return;
-          const hasAddress = columns.some((c) => c.name === "address");
-          const districtIdCol = columns.find((c) => c.name === "district_id");
-          const isNotNull = districtIdCol && districtIdCol.notnull === 1;
-
-          if (!hasAddress || isNotNull) {
-            console.log("Migrating schools table...");
-            db.serialize(() => {
-              db.run("BEGIN TRANSACTION");
-              db.run("ALTER TABLE schools RENAME TO schools_old");
-              db.run(`CREATE TABLE schools(
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
     district_id INTEGER,
-    name TEXT NOT NULL UNIQUE,
-    levels TEXT,
-    province TEXT,
-    district TEXT,
     ward TEXT,
     address TEXT,
+    phone TEXT,
+    email TEXT,
+    is_deleted INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(district_id) REFERENCES districts(id)
   )`);
-              db.run(
-                "INSERT OR IGNORE INTO schools (id, name, district_id) SELECT id, name, district_id FROM schools_old",
-              );
-              db.run("DROP TABLE schools_old");
-              db.run("COMMIT");
-            });
-          }
-        });
-      }
-    },
-  );
 
+  // Extra column check for schools (for robustness)
   addColumnIfNotExists("schools", "levels", "TEXT");
   addColumnIfNotExists("schools", "province", "TEXT");
   addColumnIfNotExists("schools", "district", "TEXT");
+  addColumnIfNotExists("schools", "district_id", "INTEGER");
   addColumnIfNotExists("schools", "ward", "TEXT");
   addColumnIfNotExists("schools", "address", "TEXT");
+  addColumnIfNotExists("schools", "is_deleted", "INTEGER DEFAULT 0");
+
 
   // Simple Seeding for Administrative Data
   db.get("SELECT COUNT(*) as count FROM provinces", (err, row) => {
