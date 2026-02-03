@@ -65,9 +65,17 @@ const allowedOrigins = [
 const io = new Server(server, {
   cors: {
     origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) {
+      // Allow if no origin (like mobile apps or curl) or if it's in the allowed list
+      const isAllowed = !origin || allowedOrigins.some(allowed => {
+        const normalizedAllowed = allowed.replace(/\/$/, "");
+        const normalizedOrigin = origin.replace(/\/$/, "");
+        return normalizedAllowed === normalizedOrigin;
+      });
+
+      if (isAllowed) {
         callback(null, true);
       } else {
+        console.warn(`[CORS] Blocked request from: ${origin}. Allowed origins are: ${allowedOrigins.join(", ")}`);
         callback(new Error("Not allowed by CORS"));
       }
     },
@@ -147,7 +155,13 @@ app.use('/api/', apiLimiter);
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) {
+      const isAllowed = !origin || allowedOrigins.some(allowed => {
+        const normalizedAllowed = allowed.replace(/\/$/, "");
+        const normalizedOrigin = origin.replace(/\/$/, "");
+        return normalizedAllowed === normalizedOrigin;
+      });
+
+      if (isAllowed) {
         callback(null, true);
       } else {
         callback(new Error("Not allowed by CORS"));
