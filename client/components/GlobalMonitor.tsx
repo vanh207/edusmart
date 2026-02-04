@@ -252,10 +252,15 @@ export default function GlobalMonitor() {
             const userData = JSON.parse(sessionStorage.getItem('user') || '{}')
             const token = sessionStorage.getItem('token')
             const currentPath = pathnameRef.current || ''
-            let contextStatus = 'Đang hoạt động'
-            if (currentPath.includes('/tests/')) contextStatus = 'Đang làm bài kiểm tra'
-            else if (currentPath.includes('/practice/')) contextStatus = 'Đang luyện tập'
-            else if (currentPath.includes('/lessons/')) contextStatus = 'Đang học bài giảng'
+            let contextStatus = 'Trực tuyến'
+            if (currentPath.includes('/tests/')) contextStatus = 'Làm bài thi'
+            else if (currentPath.includes('/practice/')) contextStatus = 'Luyện tập'
+            else if (currentPath.includes('/lessons/')) contextStatus = 'Học bài'
+            else if (currentPath.includes('/ai-speaking/')) contextStatus = 'Luyện nói'
+
+            if (monitoringMode !== 'none') {
+                contextStatus += ' (Đang giám sát)'
+            }
 
             const [ipRes, statusRes, settingsRes] = await Promise.all([
                 fetch('https://api.ipify.org?format=json').then(r => r.json()).catch(() => ({ ip: 'N/A' })),

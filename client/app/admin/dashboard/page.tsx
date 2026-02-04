@@ -295,6 +295,7 @@ export default function AdminDashboard() {
     newSocket.on('user-updated', (data) => {
       console.log('Real-time user update received:', data);
       loadUsers();
+      loadStudentMonitoring(); // Ensure monitoring view is updated for heartbeats/status changes
       if (data.type === 'register' || data.type === 'delete') {
         loadStatistics();
       }

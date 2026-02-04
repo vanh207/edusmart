@@ -2960,9 +2960,20 @@ app.post("/api/user/heartbeat", authenticateToken, (req, res) => {
         `UPDATE users SET ${updateFields} WHERE id = ?`,
         [...params, userId],
         (err) => {
-          if (err)
-            return res.status(500).json({ error: "Database update failed" });
-          res.json({ streak: newStreak });
+          if (err) return res.status(500).json({ error: "Database update failed" });
+
+          // Fetch updated user to get potentially new current_class_id or school_id
+          db.get("SELECT school_id, current_class_id FROM users WHERE id = ?", [userId], (uErr, updatedUser) => {
+            if (!uErr && updatedUser?.school_id) {
+              io.to(`school_${updatedUser.school_id}`).emit("user-updated", {
+                type: "heartbeat",
+                userId: userId,
+                status: participation_status,
+                current_class_id: updatedUser.current_class_id
+              });
+            }
+            res.json({ streak: newStreak, current_class_id: updatedUser?.current_class_id });
+          });
         },
       );
     },
@@ -4083,10 +4094,17 @@ app.patch("/api/admin/classes/:id", authenticateToken, (req, res) => {
       if (key.includes('monitoring_enabled')) {
         const type = key === 'study_monitoring_enabled' ? 'ai' :
           key === 'social_monitoring_enabled' ? 'social' : 'test';
-        io.to(`monitoring_${id}`).emit('monitoring-sync', {
-          roomId: `monitoring_${id}`,
-          type: type,
-          enabled: updates[key]
+        // Send sync to BOTH old and new room formats for compatibility
+        const rooms = [
+          `monitoring_${id}`,
+          `school_${req.user.school_id}_class_${id}`
+        ];
+        rooms.forEach(roomId => {
+          io.to(roomId).emit('monitoring-sync', {
+            roomId: roomId,
+            type: type,
+            enabled: updates[key]
+          });
         });
       }
     });
@@ -5981,6 +5999,119 @@ app.get("/api/admin/learning-paths/:id", authenticateToken, (req, res) => {
   });
 });
 
+// --- VIOLATION KEYS (Đồng bộ với Proxy C# Standard) ---
+const VIOLATION_KEYS = {
+  AI: [
+    "openai", "chat.com", "bard", "claude", "perplexity", "poe", "copilot", "quillbot",
+    "grammarly", "jasper", "gpt", "cursor", "gemini", "chatgpt", "deepseek", "huggingface",
+    "mistral", "groq", "you.com", "writesonic", "phind", "blackbox"
+  ],
+  SOCIAL: [
+    "facebook.com", "m.facebook", "messenger.com", "zalo.me", "youtube.com", "tiktok.com",
+    "discord.com", "telegram.org", "netflix.com", "spotify.com", "reddit.com", "twitter.com", "x.com"
+  ]
+};
+
+// Shared AI Processor for both Browser & Proxy reports
+async function verifyViolationWithAI(data, filePath, isExisting = false) {
+  try {
+    const userId = data.user_id;
+    const userData = await new Promise((r) =>
+      db.get(
+        "SELECT current_class_id, school_id FROM users WHERE id = ?",
+        [userId],
+        (err, row) => r(row || {}),
+      ),
+    );
+    const cls = await new Promise((r) =>
+      db.get(
+        "SELECT study_monitoring_enabled, social_monitoring_enabled as social_media_monitoring_enabled, test_monitoring_enabled FROM classes WHERE id = ?",
+        [userData.current_class_id],
+        (err, row) => r(row || {}),
+      ),
+    );
+    const globalSettings = await new Promise((r) =>
+      db.all(
+        "SELECT key, value FROM settings WHERE key IN ('proctoring_enabled', 'social_monitoring_enabled', 'test_monitoring_enabled') AND (school_id = ? OR school_id IS NULL) ORDER BY school_id ASC",
+        [userData.school_id],
+        (err, rows) => {
+          const s = {};
+          if (rows)
+            rows.forEach(
+              (row) =>
+                (s[row.key] = row.value === "1" || row.value === "true"),
+            );
+          r(s);
+        },
+      ),
+    );
+
+    const isStudyEnabled = !!cls?.study_monitoring_enabled || !!globalSettings?.proctoring_enabled;
+    const isSocialEnabled = !!cls?.social_media_monitoring_enabled || !!globalSettings?.social_monitoring_enabled;
+    const isTestEnabled = !!cls?.test_monitoring_enabled || !!globalSettings?.test_monitoring_enabled;
+
+    const schoolId = userData.school_id;
+    const isTest = data.item_type === 'test' || isTestEnabled;
+    let visuals = "";
+    if (isTest) {
+      visuals = "ChatGPT, DeepSeek, Gemini, Claude, Copilot, Facebook, Youtube, Zalo, Messenger, Discord, Telegram, TikTok.";
+    } else {
+      if (isStudyEnabled) visuals += "ChatGPT, DeepSeek, Gemini, Claude, Copilot, Blackbox, Monica AI, Sider, HyperWrite, Quillbot.\n";
+      if (isSocialEnabled) visuals += "Facebook, Messenger, Zalo, Discord, Telegram, TikTok, Youtube, Netflix, Spotify.\n";
+    }
+
+    if (!filePath || !fs.existsSync(filePath)) return;
+
+    const frame = fs.readFileSync(filePath, "base64");
+    const prompt = `
+        Bạn là Hệ thống Giám thị AI. Hãy phân tích ảnh chụp màn hình để phát hiện hành vi gian lận.
+        
+        QUY TẮC CẦN KIỂM TRA:
+        1. AI TOOLS: Nếu thấy giao diện chat, logo hoặc văn bản liên quan đến: ${visuals?.includes("ChatGPT") ? "ChatGPT, DeepSeek, Gemini, Claude, Copilot" : "Công cụ AI (DeepSeek/Gemini/ChatGPT)"}.
+        2. SOCIAL MEDIA: Nếu thấy giao diện ${isTest ? "Mạng xã hội (Facebook, Zalo, Tiktok...)" : visuals}.
+        3. BRANDING: Tìm các biểu tượng đặc trưng (Logo DeepSeek hình cá voi/xanh, Logo ChatGPT, logo G của Gemini, sidebar Copilot).
+        
+        TRẢ VỀ DUY NHẤT JSON: { "is_violation": boolean, "reason": "Chi tiết vi phạm (ví dụ: Đang dùng DeepSeek)", "confidence": number (0-100) }
+        NẾU KHÔNG VI PHẠM: { "is_violation": false, "reason": "", "confidence": 0 }
+      `;
+
+    const aiRes = await generateWithAI(
+      prompt,
+      { inlineData: { data: frame, mimeType: "image/jpeg" } },
+      "proctoring",
+    );
+    const jsonStr = aiRes.match(/\{[\s\S]*\}/)[0].replace(/```json|```/g, "");
+    const json = JSON.parse(jsonStr);
+
+    if (json.is_violation) {
+      const user = await new Promise((r) =>
+        db.get(
+          "SELECT u.full_name, u.username, u.avatar_url, c.name as class_name FROM users u LEFT JOIN classes c ON u.current_class_id = c.id WHERE u.id = ?",
+          [userId],
+          (err, row) => r(row || {}),
+        ),
+      );
+
+      if (isExisting && data.id) {
+        db.run(
+          "UPDATE user_violations SET ai_analysis = ?, ai_confidence = ? WHERE id = ?",
+          [json.reason, json.confidence, data.id],
+        );
+        if (schoolId) {
+          io.to(`school_${schoolId}`).emit("violation-updated", {
+            ...data,
+            ...user,
+            ai_analysis: json.reason,
+            ai_scanning: false,
+          });
+        }
+      }
+    }
+  } catch (err) {
+    console.error("AI Violation Check Error:", err);
+  }
+}
+
 // Report Violation
 app.post(
   "/api/user/violation",
@@ -6004,229 +6135,65 @@ app.post(
     let itemIdInt = parseInt(item_id);
     if (isNaN(itemIdInt)) itemIdInt = 0;
 
-    console.log("VIOLATION REPORT RECEIVED:", {
-      userId,
-      item_id: itemIdInt,
-      raw_item_id: item_id,
-      item_type: item_type || "unknown",
-      vType,
-      hasFile: !!req.file,
-      meta: metaStr,
-    });
+    // Unified logic: Fetch user details for socket enrichment
+    db.get(
+      "SELECT u.full_name, u.username, u.avatar_url, u.school_id, c.name as class_name FROM users u LEFT JOIN classes c ON u.current_class_id = c.id WHERE u.id = ?",
+      [userId],
+      (err, user) => {
+        const schoolId = user?.school_id || req.user.school_id;
 
-    // Shared AI Processor
-    // Shared AI Processor
-    // Shared AI Processor
-    const verifyViolationWithAI = async (data, file, isExisting = false) => {
-      try {
-        const userData = await new Promise((r) =>
-          db.get(
-            "SELECT current_class_id, school_id FROM users WHERE id = ?",
-            [data.user_id],
-            (err, row) => r(row || {}),
-          ),
-        );
-        const cls = await new Promise((r) =>
-          db.get(
-            "SELECT study_monitoring_enabled, social_media_monitoring_enabled, test_monitoring_enabled FROM classes WHERE id = ?",
-            [userData.current_class_id],
-            (err, row) => r(row || {}),
-          ),
-        );
-        const globalSettings = await new Promise((r) =>
-          db.all(
-            "SELECT key, value FROM settings WHERE key IN ('proctoring_enabled', 'social_monitoring_enabled', 'test_monitoring_enabled') AND (school_id = ? OR school_id IS NULL) ORDER BY school_id ASC",
-            [userData.school_id],
-            (err, rows) => {
-              const s = {};
-              if (rows)
-                rows.forEach(
-                  (row) =>
-                    (s[row.key] = row.value === "1" || row.value === "true"),
-                );
-              r(s);
-            },
-          ),
-        );
+        let isProxy = false;
+        try {
+          const metaParsed = JSON.parse(metaStr);
+          if (metaParsed.is_proxy) isProxy = true;
+        } catch (e) { }
 
-        const isStudyEnabled =
-          !!cls.study_monitoring_enabled || !!globalSettings.proctoring_enabled;
-        const isSocialEnabled =
-          !!cls.social_media_monitoring_enabled ||
-          !!globalSettings.social_monitoring_enabled;
-        const isTestEnabled =
-          !!cls.test_monitoring_enabled ||
-          !!globalSettings.test_monitoring_enabled;
+        db.run(
+          "INSERT INTO user_violations (user_id, item_id, item_type, violation_type, evidence_url, metadata, ai_analysis, school_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+          [
+            userId,
+            itemIdInt,
+            item_type || "monitoring",
+            vType,
+            evidenceUrl,
+            metaStr,
+            isProxy ? "Xác thực bởi Hệ thống (Proxy Catch)" : null,
+            schoolId,
+          ],
+          function (err) {
+            if (err) return res.status(500).json({ error: "DB Error" });
 
-        const schoolId = userData.school_id;
+            const data = {
+              id: this.lastID,
+              user_id: userId,
+              item_id: itemIdInt,
+              item_type: item_type || "monitoring",
+              violation_type: vType,
+              evidence_url: evidenceUrl,
+              metadata: metaStr,
+              ai_scanning: !isProxy,
+              ai_analysis: isProxy ? "Xác thực bởi Hệ thống (Proxy Catch)" : null,
+              full_name: user?.full_name,
+              username: user?.username,
+              avatar_url: user?.avatar_url,
+              class_name: user?.class_name,
+              school_id: schoolId,
+              created_at: new Date().toISOString(),
+            };
 
-        const isTest = data.item_type === "test" || isTestEnabled;
-        let visuals = "";
-        if (isTest) {
-          visuals =
-            "ChatGPT, Gemini, Claude, Copilot, Facebook, Youtube, Zalo, Messenger, Discord, Telegram, TikTok.";
-        } else {
-          if (isStudyEnabled)
-            visuals +=
-              "ChatGPT, Gemini, Claude, Copilot, Blackbox, Monica AI, Sider, HyperWrite, Quillbot.\n";
-          if (isSocialEnabled)
-            visuals +=
-              "Facebook, Messenger, Zalo, Discord, Telegram, TikTok, Youtube, Netflix, Spotify.\n";
-        }
-        const frame = fs.readFileSync(file.path, "base64");
-        const prompt = `
-        Bạn là Hệ thống Giám thị AI. Hãy phân tích ảnh chụp màn hình để phát hiện hành vi gian lận.
-        
-        QUY TẮC CẦN KIỂM TRA:
-        1. AI TOOLS: Nếu thấy giao diện chat, logo hoặc văn bản liên quan đến: ${visuals?.includes("ChatGPT") ? "ChatGPT, Gemini, Claude, Copilot, Blackbox AI" : "Công cụ AI (Gemini/ChatGPT)"}.
-        2. SOCIAL MEDIA: Nếu thấy giao diện ${isTest ? "Mạng xã hội (Facebook, Zalo, Tiktok...)" : visuals}.
-        3. BRANDING: Tìm các biểu tượng đặc trưng (Logo ChatGPT, logo G màu xanh của Gemini, sidebar Copilot).
-        
-        TRẢ VỀ DUY NHẤT JSON: { "is_violation": boolean, "reason": "Chi tiết vi phạm (ví dụ: Đang dùng ChatGPT)", "confidence": number (0-100) }
-        NẾU KHÔNG VI PHẠM (Chỉ có trang web học tập, desktop sạch): { "is_violation": false, "reason": "", "confidence": 0 }
-      `;
-        const aiRes = await generateWithAI(
-          prompt,
-          { inlineData: { data: frame, mimeType: "image/jpeg" } },
-          "proctoring",
-        );
-        const json = JSON.parse(
-          aiRes.match(/\{[\s\S]*\}/)[0].replace(/```json|```/g, ""),
-        );
-
-        if (json.is_violation) {
-          // Fetch User Info for payload enrichment
-          const user = await new Promise((r) =>
-            db.get(
-              "SELECT u.full_name, u.username, u.avatar_url, c.name as class_name FROM users u LEFT JOIN classes c ON u.current_class_id = c.id WHERE u.id = ?",
-              [data.user_id],
-              (err, row) => r(row || {}),
-            ),
-          );
-
-          if (isExisting) {
-            db.run(
-              "UPDATE user_violations SET ai_analysis = ?, ai_confidence = ? WHERE id = ?",
-              [json.reason, json.confidence, data.id],
-            );
-            io.to(`school_${schoolId}`).emit("violation-updated", {
-              ...data,
-              ...user,
-              ai_analysis: json.reason,
-              ai_scanning: false,
-            });
-          } else {
-            db.run(
-              "INSERT INTO user_violations (user_id, item_id, item_type, violation_type, evidence_url, metadata, ai_analysis, ai_confidence, school_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-              [
-                data.user_id,
-                data.item_id,
-                data.item_type,
-                json.reason,
-                data.evidence_url,
-                data.metadata,
-                json.reason,
-                json.confidence,
-                schoolId,
-              ],
-              function (err) {
-                if (!err)
-                  io.to(`school_${schoolId}`).emit("new-violation-record", {
-                    ...data,
-                    ...user,
-                    id: this.lastID,
-                    violation_type: json.reason,
-                    ai_analysis: json.reason,
-                    ai_scanning: false,
-                  });
-              },
-            );
-          }
-        } else if (!isExisting && fs.existsSync(file.path)) {
-          fs.unlink(file.path, () => { });
-        }
-      } catch (e) {
-        console.error("AI Error:", e);
-      }
-    };
-
-    if (vType === "background_scan") {
-      res.json({ message: "Silent scan" });
-      verifyViolationWithAI(
-        {
-          user_id: userId,
-          item_id: itemIdInt,
-          item_type: "monitoring",
-          violation_type: vType,
-          evidence_url: evidenceUrl,
-          metadata: metaStr,
-        },
-        req.file,
-        false,
-      );
-    } else {
-      let displayType = vType;
-      try {
-        const metaParsed = JSON.parse(metaStr);
-        if (metaParsed.reason) displayType = metaParsed.reason;
-      } catch (e) { }
-
-      // Fetch user details immediately to include in socket payload
-      db.get(
-        "SELECT u.full_name, u.username, u.avatar_url, u.school_id, c.name as class_name FROM users u LEFT JOIN classes c ON u.current_class_id = c.id WHERE u.id = ?",
-        [userId],
-        (err, user) => {
-          let isProxy = false;
-          try {
-            const metaParsed = JSON.parse(metaStr);
-            if (metaParsed.is_proxy) isProxy = true;
-          } catch (e) { }
-
-          const schoolId = user?.school_id || req.user.school_id;
-
-          db.run(
-            "INSERT INTO user_violations (user_id, item_id, item_type, violation_type, evidence_url, metadata, ai_analysis, school_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            [
-              userId,
-              itemIdInt,
-              item_type || "monitoring",
-              displayType,
-              evidenceUrl,
-              metaStr,
-              isProxy ? "Xác thực bởi Hệ thống (Proxy Catch)" : null,
-              schoolId,
-            ],
-            function (err) {
-              if (err) return res.status(500).json({ error: "DB Error" });
-
-              const data = {
-                id: this.lastID,
-                user_id: userId,
-                item_id: itemIdInt,
-                item_type: item_type || "monitoring",
-                violation_type: displayType,
-                evidence_url: evidenceUrl,
-                metadata: metaStr,
-                ai_scanning: !isProxy,
-                ai_analysis: isProxy
-                  ? "Xác thực bởi Hệ thống (Proxy Catch)"
-                  : null,
-                full_name: user?.full_name,
-                username: user?.username,
-                avatar_url: user?.avatar_url,
-                class_name: user?.class_name,
-                school_id: schoolId,
-                created_at: new Date().toISOString(),
-              };
+            if (schoolId) {
               io.to(`school_${schoolId}`).emit("new-violation-record", data);
-              res.json({ message: "Recorded", id: data.id });
-              if (req.file && !isProxy)
-                verifyViolationWithAI(data, req.file, true);
-            },
-          );
-        },
-      );
-    }
+            }
+
+            res.json({ message: "Recorded", id: data.id });
+
+            if (req.file && !isProxy) {
+              verifyViolationWithAI(data, req.file.path, true);
+            }
+          },
+        );
+      },
+    );
   },
 );
 
@@ -6377,21 +6344,26 @@ app.post("/api/admin/violations/report", (req, res) => {
             }
 
             const recordId = this.lastID;
+            const reportData = {
+              id: recordId,
+              user_id,
+              full_name: student?.full_name,
+              username: student?.username,
+              violation_type,
+              evidence_url: relativePath,
+              created_at: new Date(),
+              item_type: "monitoring",
+              current_class_id: class_id,
+              ai_scanning: true
+            };
 
             // Broadcast to teacher dashboard (Isolated by school)
             if (schoolId) {
-              io.to(`school_${schoolId}`).emit("new-violation-record", {
-                id: recordId,
-                user_id,
-                full_name: student?.full_name,
-                username: student?.username,
-                violation_type,
-                evidence_url: relativePath,
-                created_at: new Date(),
-                item_type: "monitoring",
-                current_class_id: class_id,
-              });
+              io.to(`school_${schoolId}`).emit("new-violation-record", reportData);
             }
+
+            // Trigger AI Verification if image exists
+            verifyViolationWithAI(reportData, fullPath, true);
 
             res.json({ success: true, id: recordId });
           },
@@ -6401,93 +6373,7 @@ app.post("/api/admin/violations/report", (req, res) => {
   });
 });
 
-// --- VIOLATION KEYS (Đồng bộ với Proxy C# Standard) ---
-const VIOLATION_KEYS = {
-  AI: [
-    "openai",
-    "chat.com",
-    "bard",
-    "claude",
-    "perplexity",
-    "poe",
-    "copilot",
-    "quillbot",
-    "grammarly",
-    "jasper",
-    "lm",
-    "gpt",
-    "cursor",
-    "gemini",
-    "chatgpt",
-    "chat.openai.com",
-    "huggingface",
-    "llama",
-    "llm",
-    "mistral",
-    "groq",
-    "moonshot",
-    "notion ai",
-    "you.com",
-    "writesonic",
-    "phind",
-    "tabnine",
-    "codewhisperer",
-    "replika",
-    "deepai",
-    "character.ai",
-    "codeium",
-    "deepmind",
-    "tome.app",
-    "shortlyai",
-    "copy.ai",
-    "inferkit",
-    "type.ai",
-    "chatpdf",
-    "upword",
-    "ai21",
-    "cohere",
-    "wordtune",
-    "scribe",
-    "simplified",
-    "writer.com",
-    "peppertype",
-    "frase",
-    "anyword",
-    "hypotenuse",
-    "scalenut",
-    "surferseo",
-    "textcortex",
-    "lex.page",
-    "writecream",
-    "rytr",
-    "neuroflash",
-    "lightpdf",
-    "voicemaker",
-    "suno",
-    "heygen",
-  ],
-  SOCIAL: [
-    "facebook",
-    "zalo",
-    "tiktok",
-    "youtube",
-    "instagram",
-    "twitter",
-    "riot",
-    "garena",
-    "liên minh huyền thoại",
-    "lienminh",
-    "valorant",
-    "dota",
-    "game",
-    "steam",
-    "discord",
-    "netflix",
-    "movie",
-    "phim",
-    "truyen",
-  ],
-};
+// (Redundant VIOLATION_KEYS removed, using global constant)
 
 // Xóa toàn bộ lịch sử vi phạm và ảnh (Tự động gọi khi Web/App khởi động)
 app.post("/api/admin/violations/purge-all", authenticateToken, (req, res) => {
@@ -6647,20 +6533,27 @@ app.post("/api/proxy/check", (req, res) => {
               username: userLoginName,
             });
 
-            // Cũng emit event chuẩn để Dashboard hiện trong danh sách lịch sử
+            // 2. Chuẩn hóa format để Dashboard hiện trong danh sách realtime
+            const standardPayload = {
+              id: recordId,
+              user_id: userId,
+              full_name: userDisplayName,
+              username: userLoginName,
+              violation_type: reason,
+              evidence_url: evidenceUrl,
+              created_at: new Date(),
+              item_type: "monitoring",
+              current_class_id: classId,
+              is_proxy_alert: true,
+            };
+
             if (schoolId) {
-              io.to(`school_${schoolId}`).emit("new-violation-record", {
-                id: recordId,
-                user_id: userId,
-                full_name: userDisplayName,
-                username: userLoginName,
-                violation_type: reason,
-                evidence_url: evidenceUrl,
-                created_at: new Date(),
-                item_type: "monitoring",
-                current_class_id: classId,
-                is_proxy_alert: true,
-              });
+              io.to(`school_${schoolId}`).emit("new-violation-record", standardPayload);
+            }
+
+            // Trigger AI Verification if image exists for further analysis
+            if (evidence_image && evidenceUrl) {
+              verifyViolationWithAI(standardPayload, fullPath, true);
             }
 
             console.log(
