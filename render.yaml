@@ -1,0 +1,46 @@
+# Render Blueprint for Edusmart Application
+version: "1"
+services:
+  - type: web
+    name: edusmart-backend
+    runtime: node
+    repo: https://github.com/vanh207/edusmart
+    plan: free
+    region: oregon
+    buildCommand: cd server && npm install
+    startCommand: node server/index.js
+    healthCheckPath: /health
+    autoDeployTrigger: commit
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: CLIENT_URL
+        sync: false # Set to your Vercel URL, e.g., https://edusmart-one.vercel.app
+      - key: JWT_SECRET
+        generateValue: true # Generates a random secure key
+      - key: GEMINI_KEY_CHAT
+        sync: false
+      - key: GEMINI_KEY_PROCTOR
+        sync: false
+      - key: GEMINI_KEY_CONTENT
+        sync: false
+      - key: GEMINI_KEY_EXPLAIN
+        sync: false
+      - key: GEMINI_KEY_SPEAKING
+        sync: false
+      - key: GEMINI_KEY_PRONUNCIATION
+        sync: false
+      - key: GEMINI_KEY_WRITING
+        sync: false
+      - key: GEMINI_API_KEY # Legacy fallback
+        sync: false
+      - key: SMTP_HOST
+        value: smtp.gmail.com
+      - key: SMTP_PORT
+        value: 465
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
