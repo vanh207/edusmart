@@ -2,12 +2,33 @@ const admin = require("firebase-admin");
 const path = require("path");
 const fs = require("fs");
 
-const serviceAccountPath = path.join(__dirname, "serviceAccountKey.json");
+let serviceAccount = null;
 let isInitialized = false;
 
-if (fs.existsSync(serviceAccountPath)) {
+// 1. Try to load from Environment Variable (Recommended for Production/Render)
+if (process.env.FIREBASE_SERVICE_ACCOUNT) {
     try {
-        const serviceAccount = require(serviceAccountPath);
+        serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+        console.log("[Firebase] Loading credentials from Environment Variable.");
+    } catch (err) {
+        console.error("[Firebase] Error parsing FIREBASE_SERVICE_ACCOUNT env var:", err.message);
+    }
+}
+// 2. Fallback: Try to load from file (Local development)
+else {
+    const serviceAccountPath = path.join(__dirname, "serviceAccountKey.json");
+    if (fs.existsSync(serviceAccountPath)) {
+        try {
+            serviceAccount = require(serviceAccountPath);
+            console.log("[Firebase] Loading credentials from serviceAccountKey.json.");
+        } catch (err) {
+            console.error("[Firebase] Error loading serviceAccountKey.json:", err.message);
+        }
+    }
+}
+
+if (serviceAccount) {
+    try {
         if (admin.apps.length === 0) {
             admin.initializeApp({
                 credential: admin.credential.cert(serviceAccount)
@@ -22,8 +43,7 @@ if (fs.existsSync(serviceAccountPath)) {
     }
 } else {
     console.log("-----------------------------------------");
-    console.error("[Firebase] THIẾU FILE: serviceAccountKey.json");
-    console.error("Vui lòng tải file Private Key từ Firebase Console và lưu vào: " + serviceAccountPath);
+    console.error("[Firebase] MISSING CREDENTIALS: Set FIREBASE_SERVICE_ACCOUNT env var or add serviceAccountKey.json");
     console.log("-----------------------------------------");
 }
 
