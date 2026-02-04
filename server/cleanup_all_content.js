@@ -80,8 +80,9 @@ db.serialize(() => {
         console.log(`✅ Backup hoàn tất: ${backupFile}\n`);
 
         // Step 2: Delete data
-        console.log('🗑️  BẮT ĐẦU XÓA DỮ LIỆU...\n');
+        console.log('🗑️  DỮ LIỆU ĐÃ ĐƯỢC BACKUP (Logic xóa đã được tạm dừng để đảm bảo an toàn)...\n');
 
+        /*
         // Delete in correct order (respect foreign keys)
         db.run('DELETE FROM test_results', function (err) {
             if (err) console.error('❌ Lỗi xóa test_results:', err);
@@ -128,5 +129,9 @@ db.serialize(() => {
 
             db.close();
         });
+        */
+        console.log(`\n📁 File backup đã sẵn sàng: ${backupFile}`);
+        console.log('\n⚠️  LƯU Ý: Đã tạm dừng logic xóa để bảo vệ dữ liệu.\n');
+        db.close();
     });
 });

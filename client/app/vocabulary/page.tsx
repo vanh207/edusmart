@@ -68,22 +68,37 @@ export default function Vocabulary() {
 
     const fetchData = async () => {
       try {
-        const [profileRes, vocabRes] = await Promise.all([
-          userAPI.getProfile(),
-          vocabularyAPI.getAll(filters)
+        const [profileRes] = await Promise.all([
+          userAPI.getProfile()
         ])
-        setUser(profileRes.data)
+        const userProfile = profileRes.data
+        setUser(userProfile)
 
+        // Tự động gán grade_level nếu chưa được chọn
+        const currentFilters = { ...filters };
+        if (!currentFilters.grade_level && userProfile.grade_level) {
+          currentFilters.grade_level = userProfile.grade_level;
+        }
+
+        const vocabRes = await vocabularyAPI.getAll(currentFilters)
         let data = vocabRes.data
+
         if (filters.search) {
           data = data.filter((v: any) =>
             v.word.toLowerCase().includes(filters.search.toLowerCase()) ||
             v.meaning.toLowerCase().includes(filters.search.toLowerCase())
           )
         }
+
+        // Logic lọc type: Speaking bao gồm cả Reading (theo yêu cầu hệ thống cũ)
         if (filters.type) {
-          data = data.filter((v: any) => filters.type === 'speaking' ? (v.type === 'reading' || v.type === 'speaking') : v.type === filters.type)
+          data = data.filter((v: any) =>
+            filters.type === 'speaking'
+              ? (v.type === 'reading' || v.type === 'speaking')
+              : v.type === filters.type
+          )
         }
+
         setVocabulary(data)
       } catch (err) {
         console.error('Failed to load data', err)

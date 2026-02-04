@@ -5800,6 +5800,7 @@ app.get("/api/classes", (req, res) => {
 
 // Student: Get current class status and schedule
 app.get("/api/user/class-status", authenticateToken, (req, res) => {
+  const schoolId = req.user.school_id;
   db.get(
     "SELECT current_class_id FROM users WHERE id = ?",
     [req.user.id],
@@ -5811,31 +5812,46 @@ app.get("/api/user/class-status", authenticateToken, (req, res) => {
         });
       }
 
-      db.get(
-        "SELECT * FROM classes WHERE id = ?",
-        [user.current_class_id],
-        (err, cls) => {
-          if (err || !cls) {
-            return res.json({
-              in_class: false,
-              participation_status: "Không tham gia",
+      // Fetch global settings for the school
+      db.all(
+        "SELECT key, value FROM settings WHERE school_id = ?",
+        [schoolId],
+        (sErr, settingsRows) => {
+          const globalSettings = {};
+          if (!sErr && settingsRows) {
+            settingsRows.forEach(row => {
+              globalSettings[row.key] = row.value === "1";
             });
           }
 
-          res.json({
-            id: cls.id,
-            in_class: true,
-            class_name: cls.name,
-            schedule_start: cls.schedule_start,
-            schedule_end: cls.schedule_end,
-            schedule_days: cls.schedule_days
-              ? JSON.parse(cls.schedule_days)
-              : [],
-            study_monitoring: !!cls.study_monitoring_enabled,
-            test_monitoring: !!cls.test_monitoring_enabled,
-            social_monitoring: !!cls.social_monitoring_enabled,
-          });
-        },
+          db.get(
+            "SELECT * FROM classes WHERE id = ?",
+            [user.current_class_id],
+            (err, cls) => {
+              if (err || !cls) {
+                return res.json({
+                  in_class: false,
+                  participation_status: "Không tham gia",
+                });
+              }
+
+              res.json({
+                id: cls.id,
+                in_class: true,
+                class_name: cls.name,
+                schedule_start: cls.schedule_start,
+                schedule_end: cls.schedule_end,
+                schedule_days: cls.schedule_days
+                  ? JSON.parse(cls.schedule_days)
+                  : [],
+                // Merge class-specific and global settings
+                study_monitoring: !!cls.study_monitoring_enabled || !!globalSettings.study_monitoring_enabled || !!globalSettings.proctoring_enabled,
+                test_monitoring: !!cls.test_monitoring_enabled || !!globalSettings.test_monitoring_enabled,
+                social_monitoring: !!cls.social_monitoring_enabled || !!globalSettings.social_monitoring_enabled,
+              });
+            },
+          );
+        }
       );
     },
   );
