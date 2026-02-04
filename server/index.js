@@ -595,7 +595,7 @@ function autoAssignStudentToClass(userId, callback) {
       // Find exact class match
       db.get(
         `SELECT id FROM classes 
-         WHERE name = ? AND school_id = ? AND grade_level = ?
+         WHERE UPPER(name) = UPPER(?) AND school_id = ? AND grade_level = ?
          LIMIT 1`,
         [user.class_name, user.school_id, user.grade_level],
         (err, targetClass) => {
@@ -3163,13 +3163,24 @@ app.post("/api/user/profile", authenticateToken, (req, res) => {
           if (err) {
             return res.status(500).json({ error: "Failed to update profile" });
           }
+
+          const userId = req.user.id;
+
+          // Auto-assign student to class if they are a student
+          db.get("SELECT role FROM users WHERE id = ?", [userId], (err, user) => {
+            if (user && user.role === 'student') {
+              console.log(`Triggering auto-assign for student ${userId}`);
+              autoAssignStudentToClass(userId);
+            }
+          });
+
           res.json({ message: "Profile updated successfully" });
 
           // Real-time update for admins (Isolated by school)
-          if (req.user.school_id) {
-            io.to(`school_${req.user.school_id}`).emit("user-updated", {
+          if (schoolId) { // Use the schoolId calculated above
+            io.to(`school_${schoolId}`).emit("user-updated", {
               type: "update",
-              userId: req.user.id,
+              userId: userId,
             });
           }
         },
@@ -3972,10 +3983,11 @@ app.get("/api/admin/users", authenticateToken, (req, res) => {
                  FROM users WHERE 1=1`;
       const params = [];
 
-      // Data Isolation: Non-super admins only see their school's users
       if (currentUser.is_super_admin !== 1) {
+        const schoolId = currentUser.school_id || req.user.school_id;
+        console.log(`[AdminUsers] Filtering users for admin ${currentUser.username} (School IDs: ${currentUser.school_id} / ${req.user.school_id}). Using ID: ${schoolId}`);
         query += " AND school_id = ?";
-        params.push(currentUser.school_id || req.user.school_id);
+        params.push(schoolId);
       }
 
       if (role) {
