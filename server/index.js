@@ -4079,14 +4079,31 @@ app.post("/api/admin/classes", authenticateToken, (req, res) => {
           .status(500)
           .json({ error: "Database error: " + err.message });
       }
+      const classId = this.lastID;
       logActivity(
         req.user.id,
         req.user.username,
         "Tạo lớp học",
-        `Tạo lớp: ${name} (ID: ${this.lastID})`,
+        `Tạo lớp: ${name} (ID: ${classId})`,
         req.user.school_id,
       );
-      res.json({ id: this.lastID, message: "Class created successfully" });
+
+      // ✅ Auto-assign existing students with matching class_name
+      db.run(
+        `UPDATE users 
+         SET class_id = ?, current_class_id = ? 
+         WHERE role = 'student' 
+           AND UPPER(class_name) = UPPER(?) 
+           AND (school_id = ? OR school = (SELECT name FROM schools WHERE id = ?))
+           AND grade_level = ?`,
+        [classId, classId, name, req.user.school_id, req.user.school_id, grade_level],
+        function (assignErr) {
+          if (assignErr) console.error('Batch auto-assign error:', assignErr);
+          else if (this.changes > 0) console.log(`✓ Auto-assigned ${this.changes} existing students to class ${classId} (${name})`);
+        }
+      );
+
+      res.json({ id: classId, message: "Class created successfully" });
       io.to(`school_${req.user.school_id}`).emit("classes-updated");
     },
   );
@@ -8373,13 +8390,13 @@ app.post("/api/admin/classes", authenticateToken, enforceSchoolIsolation, (req, 
       // ✅ Auto-assign existing students with matching class_name
       db.run(
         `UPDATE users 
-         SET class_id = ? 
+         SET class_id = ?, current_class_id = ? 
          WHERE role = 'student' 
-           AND class_name = ? 
+           AND UPPER(class_name) = UPPER(?) 
            AND school_id = ? 
            AND grade_level = ?
            AND (class_id IS NULL OR class_id != ?)`,
-        [classId, name, schoolId, grade_level, classId],
+        [classId, classId, name, schoolId, grade_level, classId],
         function (assignErr) {
           if (assignErr) {
             console.error('Batch auto-assign error:', assignErr);
