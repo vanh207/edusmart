@@ -1209,12 +1209,7 @@ db.serialize(() => {
     PRIMARY KEY(key, school_id)
   )`,
     (err) => {
-      if (!err) {
-        // Seed default proctoring status if not exists (global defaults)
-        db.run("INSERT OR IGNORE INTO settings (key, value, school_id) VALUES ('proctoring_enabled', '0', NULL)");
-        db.run("INSERT OR IGNORE INTO settings (key, value, school_id) VALUES ('social_monitoring_enabled', '0', NULL)");
-        db.run("INSERT OR IGNORE INTO settings (key, value, school_id) VALUES ('test_monitoring_enabled', '0', NULL)");
-      }
+      // Settings table initialized (No default seeding for production)
     },
   );
 
@@ -1303,20 +1298,16 @@ u.id,
   // Ensure pronunciation column exists
   addColumnIfNotExists("vocabulary", "pronunciation", "TEXT");
 
-  // Create default users AFTER migration
+  // Create Super Admin if not exists
   const adminPassword = bcrypt.hashSync("admin123", 10);
   db.run(
     `INSERT OR IGNORE INTO users(username, password, full_name, role, is_super_admin)
-VALUES('admin', ?, 'Super Administrator', 'admin', 1)`,
+     VALUES('admin', ?, 'Super Administrator', 'admin', 1)`,
     [adminPassword],
   );
 
-  const studentPassword = bcrypt.hashSync("student123", 10);
-  db.run(
-    `INSERT OR IGNORE INTO users(username, password, full_name, role, grade_level)
-VALUES('student', ?, 'Student Test', 'student', 'thcs_6')`,
-    [studentPassword],
-  );
+  // Production: No default student users or sample schools created here.
+  // Use /api/auth/register or admin panel to create other users.
 
   // Tests/Exams table
   db.run(`CREATE TABLE IF NOT EXISTS tests(
@@ -1513,131 +1504,9 @@ VALUES('student', ?, 'Student Test', 'student', 'thcs_6')`,
   addColumnIfNotExists("schools", "is_deleted", "INTEGER DEFAULT 0");
 
 
-  // Simple Seeding for Administrative Data
-  db.get("SELECT COUNT(*) as count FROM provinces", (err, row) => {
-    if (row && row.count === 0) {
-      // Hanoi
-      db.run("INSERT INTO provinces (name) VALUES ('Hà Nội')", function () {
-        const hnId = this.lastID;
-        db.run(
-          "INSERT INTO districts (province_id, name) VALUES (?, ?)",
-          [hnId, "Quận Ba Đình"],
-          function () {
-            const dId = this.lastID;
-            db.run("INSERT INTO wards (district_id, name) VALUES (?, ?)", [
-              dId,
-              "Phường Phúc Xá",
-            ]);
-            db.run("INSERT INTO wards (district_id, name) VALUES (?, ?)", [
-              dId,
-              "Phường Trúc Bạch",
-            ]);
-            db.run("INSERT INTO schools (district_id, name) VALUES (?, ?)", [
-              dId,
-              "THPT Phan Đình Phùng",
-            ]);
-            db.run("INSERT INTO schools (district_id, name) VALUES (?, ?)", [
-              dId,
-              "THCS Nguyễn Trãi",
-            ]);
-          },
-        );
-        db.run(
-          "INSERT INTO districts (province_id, name) VALUES (?, ?)",
-          [hnId, "Quận Cầu Giấy"],
-          function () {
-            const dId = this.lastID;
-            db.run("INSERT INTO wards (district_id, name) VALUES (?, ?)", [
-              dId,
-              "Phường Dịch Vọng",
-            ]);
-            db.run("INSERT INTO wards (district_id, name) VALUES (?, ?)", [
-              dId,
-              "Phường Mai Dịch",
-            ]);
-            db.run("INSERT INTO schools (district_id, name) VALUES (?, ?)", [
-              dId,
-              "Đại học Quốc gia Hà Nội",
-            ]);
-            db.run("INSERT INTO schools (district_id, name) VALUES (?, ?)", [
-              dId,
-              "THPT Cầu Giấy",
-            ]);
-          },
-        );
-      });
-      // TP HCM
-      db.run(
-        "INSERT INTO provinces (name) VALUES ('TP. Hồ Chí Minh')",
-        function () {
-          const hcmId = this.lastID;
-          db.run(
-            "INSERT INTO districts (province_id, name) VALUES (?, ?)",
-            [hcmId, "Quận 1"],
-            function () {
-              const dId = this.lastID;
-              db.run("INSERT INTO wards (district_id, name) VALUES (?, ?)", [
-                dId,
-                "Phường Bến Nghé",
-              ]);
-              db.run("INSERT INTO wards (district_id, name) VALUES (?, ?)", [
-                dId,
-                "Phường Đa Kao",
-              ]);
-              db.run("INSERT INTO schools (district_id, name) VALUES (?, ?)", [
-                dId,
-                "Đại học KHXH&NV TP.HCM",
-              ]);
-            },
-          );
-          db.run(
-            "INSERT INTO districts (province_id, name) VALUES (?, ?)",
-            [hcmId, "Quận 3"],
-            function () {
-              const dId = this.lastID;
-              db.run("INSERT INTO wards (district_id, name) VALUES (?, ?)", [
-                dId,
-                "Phường Võ Thị Sáu",
-              ]);
-              db.run("INSERT INTO schools (district_id, name) VALUES (?, ?)", [
-                dId,
-                "Đại học Kinh tế TP.HCM",
-              ]);
-            },
-          );
-        },
-      );
-      // Da Nang
-      db.run("INSERT INTO provinces (name) VALUES ('Đà Nẵng')", function () {
-        const dnId = this.lastID;
-        db.run(
-          "INSERT INTO districts (province_id, name) VALUES (?, ?)",
-          [dnId, "Quận Hải Châu"],
-          function () {
-            const dId = this.lastID;
-            db.run("INSERT INTO wards (district_id, name) VALUES (?, ?)", [
-              dId,
-              "Phường Thạch Thang",
-            ]);
-            db.run("INSERT INTO schools (district_id, name) VALUES (?, ?)", [
-              dId,
-              "THPT Phan Châu Trinh",
-            ]);
-          },
-        );
-        db.run(
-          "INSERT INTO districts (province_id, name) VALUES (?, ?)",
-          [dnId, "Quận Thanh Khê"],
-          function () {
-            db.run("INSERT INTO wards (district_id, name) VALUES (?, ?)", [
-              this.lastID,
-              "Phường Hòa Khê",
-            ]);
-          },
-        );
-      });
-    }
-  });
+  // Administrative data seeding removed for production.
+  // Schools and regions should be managed through the Super Admin panel.
+
 
   // Test violations table
   db.run(`CREATE TABLE IF NOT EXISTS test_violations(
