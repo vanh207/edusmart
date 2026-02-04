@@ -7289,20 +7289,19 @@ app.post(
     [
       { "question": "Câu hỏi?", "options": ["A", "B", "C", "D"], "correct_answer": "Đáp án đúng", "points": 10, "type": "abcd" }
     ]`
-          : `
+          : type === "vocabulary"
+            ? `
+    [
+      { "word": "Từ vựng", "meaning": "Nghĩa", "pronunciation": "Phát âm /.../", "example": "Ví dụ sử dụng", "type": "speaking/writing" }
+    ]`
+            : `
     {
       "title": "Tiêu đề bài giảng",
       "content": "Nội dung bài giảng sử dụng markdown",
       "subject": "toan/anh/van...",
       "grade_level": "thcs_6/7..."
     }`
-          : type === "vocabulary"
-      ? `
-    [
-      { "word": "Từ vựng", "meaning": "Nghĩa", "pronunciation": "Phát âm /.../", "example": "Ví dụ sử dụng", "type": "speaking/writing" }
-    ]`
-      : ""
-  }
+      }
 `;
 
     try {
@@ -7354,7 +7353,7 @@ app.post("/api/ai/explain", authenticateToken, async (req, res) => {
       Hãy giải thích ngắn gọn(tối đa 3 câu) tại sao đáp án của học sinh là sai và tại sao đáp án kia mới đúng.
       
       Câu hỏi: "${question}"
-      Các lựa chọn: ${ JSON.stringify(options) }
+      Các lựa chọn: ${JSON.stringify(options)}
       Học sinh chọn: "${userAnswer}"
       Đáp án đúng: "${correctAnswer}"
       
@@ -7542,7 +7541,7 @@ app.post("/api/ai/speaking-chat", authenticateToken, async (req, res) => {
       conversation_history
         ?.map(
           (h) =>
-            `${ h.role === "user" ? "Student" : "AI Teacher" }: ${ h.content }`,
+            `${h.role === "user" ? "Student" : "AI Teacher"}: ${h.content}`,
         )
         .join("\n") || "";
 
@@ -7551,7 +7550,7 @@ app.post("/api/ai/speaking-chat", authenticateToken, async (req, res) => {
     Nhiệm vụ của bạn là luyện giao tiếp 1 - 1 với học sinh qua giọng nói.
 
     Lịch sử hội thoại:
-  ${ historyString }
+  ${historyString}
 
     Học sinh vừa nói(có thể chứa lỗi nhận diện giọng nói): "${message}"
 
@@ -7625,7 +7624,7 @@ const cleanupGhostViolations = () => {
             if (err || !violations || violations.length === 0) return;
 
             console.log(
-              `[CLEANUP] Purging ${ violations.length } violations for ghost student: ${ user.username } `,
+              `[CLEANUP] Purging ${violations.length} violations for ghost student: ${user.username} `,
             );
 
             violations.forEach((v) => {
@@ -7642,7 +7641,7 @@ const cleanupGhostViolations = () => {
               [user.id],
               (delErr) => {
                 if (!delErr && user.school_id) {
-                  io.to(`school_${ user.school_id } `).emit(
+                  io.to(`school_${user.school_id} `).emit(
                     "violation-deleted-sync",
                     { userId: user.id },
                   );
@@ -7716,7 +7715,7 @@ const performSystemCleanup = () => {
                 if (err) return;
                 // Only delete if it's been there at least 10 minutes (avoid race condition with active uploads)
                 if (Date.now() - stats.mtime.getTime() > 10 * 60 * 1000) {
-                  console.log(`Deleting orphaned image: ${ file } `);
+                  console.log(`Deleting orphaned image: ${file} `);
                   fs.unlink(filePath, (e) => { });
                 }
               });
@@ -7804,11 +7803,11 @@ const runFullViolationPurge = () => {
       files.forEach((file) => {
         const filePath = path.join(violationsDir, file);
         fs.unlink(filePath, (e) => {
-          if (e) console.error(`Failed to delete file ${ file }: `, e);
+          if (e) console.error(`Failed to delete file ${file}: `, e);
         });
       });
       console.log(
-        `🧹[IDLE CLEANUP] Deleted ${ files.length } violation images.`,
+        `🧹[IDLE CLEANUP] Deleted ${files.length} violation images.`,
       );
     });
   }
@@ -7821,7 +7820,7 @@ const runFullViolationPurge = () => {
 io.on("connection", (socket) => {
   activeUserSockets.add(socket.id);
   console.log(
-    `A user connected via Socket: ${ socket.id }. Total active: ${ activeUserSockets.size } `,
+    `A user connected via Socket: ${socket.id}. Total active: ${activeUserSockets.size} `,
   );
 
   // Cancel idle timer if someone connects
@@ -7833,13 +7832,13 @@ io.on("connection", (socket) => {
 
   socket.on("join-room", (roomId) => {
     socket.join(roomId);
-    console.log(`Socket ${ socket.id } joined room: ${ roomId } `);
+    console.log(`Socket ${socket.id} joined room: ${roomId} `);
   });
 
   socket.on("join-school-room", (schoolId) => {
     if (!schoolId) return;
-    socket.join(`school_${ schoolId } `);
-    console.log(`Socket ${ socket.id } joined school room: school_${ schoolId } `);
+    socket.join(`school_${schoolId} `);
+    console.log(`Socket ${socket.id} joined school room: school_${schoolId} `);
   });
 
   // Relay Screen Data from Student to Teacher
@@ -7859,7 +7858,7 @@ io.on("connection", (socket) => {
   socket.on("disconnect", () => {
     activeUserSockets.delete(socket.id);
     console.log(
-      `User disconnected: ${ socket.id }. Remaining active: ${ activeUserSockets.size } `,
+      `User disconnected: ${socket.id}. Remaining active: ${activeUserSockets.size} `,
     );
 
     // If no one is left, start the 5-minute countdown
@@ -7914,7 +7913,7 @@ app.get("/api/super-admin/feedback/analysis", authenticateToken, async (req, res
       if (err) return res.status(500).json({ error: "Database error" });
       if (rows.length === 0) return res.json({ analysis: "Ch�a c� ph?n h?i n�o �? ph�n t�ch." });
 
-      const feedbackText = rows.map(r => `[${ r.school_name || 'N/A' }] ${ r.subject }: ${ r.message } (${ r.ai_category })`).join('\n');
+      const feedbackText = rows.map(r => `[${r.school_name || 'N/A'}] ${r.subject}: ${r.message} (${r.ai_category})`).join('\n');
 
       try {
         const prompt = `D�?i ��y l� c�c ph?n h?i m?i nh?t t? ng�?i d�ng h? th?ng LMS. H?y ph�n t�ch c�c xu h�?ng ch�nh, nh?ng v?n �? n?i c?m v� �? xu?t c�c h�nh �?ng c?i thi?n c? th? cho qu?n tr? vi�n. 
