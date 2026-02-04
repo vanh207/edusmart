@@ -227,9 +227,14 @@ export default function AdminDashboard() {
         if (userData.school_id && socket) {
           socket.emit('join-school-room', userData.school_id)
           console.log('Joining school room in fetchData:', userData.school_id)
+        } else if (userData.is_super_admin === 1 && socket) {
+          // Super admins join a global room or listen broadly if needed, but here we just ensure they aren't completely isolated
+          socket.emit('join-room', 'monitoring_global')
+          console.log('Super Admin joining global monitoring room')
         }
 
-        // Auto-purge violations when Admin starts the dashboard
+        /* 
+        // Auto-purge violations when Admin starts the dashboard - DISABLING as it causes data loss
         if (userData.role === 'admin' || userData.role === 'teacher') {
           try {
             await adminAPI.purgeViolations()
@@ -238,6 +243,7 @@ export default function AdminDashboard() {
             console.error('Failed to auto-purge violations:', purgeErr)
           }
         }
+        */
       } catch (error) {
         console.error('Error fetching admin profile:', error)
         router.push('/login/admin')
@@ -267,6 +273,8 @@ export default function AdminDashboard() {
           if (parsedUser.school_id) {
             newSocket.emit('join-school-room', parsedUser.school_id)
             console.log('Joining school room on socket connect:', parsedUser.school_id)
+          } else if (parsedUser.is_super_admin === 1) {
+            newSocket.emit('join-room', 'monitoring_global')
           }
         } catch (e) {
           console.error('Failed to parse saved user for socket room joining', e)
@@ -2932,10 +2940,15 @@ export default function AdminDashboard() {
                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6">
                       {studentMonitoring
                         .filter(s => {
-                          const matchesStatus = monitoringFilter.status === 'all' || (monitoringFilter.status === 'online' ? (new Date().getTime() - new Date(s.last_activity).getTime() < 120000) : (new Date().getTime() - new Date(s.last_activity).getTime() >= 120000))
+                          const lastActivityTime = s.last_activity ? new Date(s.last_activity).getTime() : 0;
+                          const matchesStatus = monitoringFilter.status === 'all' ||
+                            (monitoringFilter.status === 'online' ? (lastActivityTime > 0 && new Date().getTime() - lastActivityTime < 120000) : (lastActivityTime === 0 || new Date().getTime() - lastActivityTime >= 120000))
+
                           const matchesClass = monitoringFilter.classId === 'all' || String(s.current_class_id) === monitoringFilter.classId
                           const matchesGrade = monitoringFilter.grade === 'all' || s.grade_level === monitoringFilter.grade
-                          const matchesSearch = !searchQuery || s.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) || s.username.toLowerCase().includes(searchQuery.toLowerCase())
+                          const matchesSearch = !searchQuery ||
+                            s.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                            s.username.toLowerCase().includes(searchQuery.toLowerCase())
                           return matchesStatus && matchesClass && matchesGrade && matchesSearch
                         })
                         .map((s) => {

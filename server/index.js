@@ -285,8 +285,8 @@ app.get("/api", (req, res) => {
 async function generateWithAI(prompt, imagePart = null, feature = "content") {
   const modelsToTry = [
     "models/gemini-2.0-flash",
-    "models/gemini-2.0-flash-exp",
-    "models/gemini-flash-latest",
+    "models/gemini-1.5-flash",
+    "models/gemini-1.5-flash-8b",
     "models/gemini-pro-latest",
   ];
 
@@ -2875,37 +2875,19 @@ app.get("/api/leaderboard", authenticateToken, (req, res) => {
 
 // Heartbeat for online status, study streak, and monitoring metadata
 app.post("/api/user/heartbeat", authenticateToken, (req, res) => {
+  const { participation_status, os_info, browser_info } = req.body;
   const userId = req.user.id;
-  const {
-    participation_status,
-    os_info,
-    browser_info,
-    wifi_info,
-    bssid,
-    ip_address,
-    client_time,
-    client_today,
-  } = req.body;
-  const today = client_today || new Date().toISOString().split("T")[0];
+  const today = new Date().toISOString().split("T")[0];
 
   db.get(
-    "SELECT last_study_date, study_streak, class_name, school_id FROM users WHERE id = ?",
+    "SELECT id, username, last_study_date, study_streak, school_id, school, class_name, current_class_id FROM users WHERE id = ?",
     [userId],
     (err, user) => {
-      if (err) return res.status(500).json({ error: "Database error" });
-      if (!user) return res.status(404).json({ error: "User not found" });
+      if (err || !user) return res.status(500).json({ error: "User not found" });
 
-      let newStreak = user.study_streak || 0;
-      let updateFields = client_time
-        ? "last_activity = ?"
-        : "last_activity = CURRENT_TIMESTAMP";
-      let params = client_time ? [client_time] : [];
+      let updateFields = "last_activity = ?, participation_status = ?";
+      const params = [new Date().toISOString(), participation_status || "Đang hoạt động"];
 
-      // Metadata updates
-      if (participation_status) {
-        updateFields += ", participation_status = ?";
-        params.push(participation_status);
-      }
       if (os_info) {
         updateFields += ", os_info = ?";
         params.push(os_info);
@@ -2914,39 +2896,32 @@ app.post("/api/user/heartbeat", authenticateToken, (req, res) => {
         updateFields += ", browser_info = ?";
         params.push(browser_info);
       }
-      if (wifi_info) {
-        updateFields += ", wifi_info = ?";
-        params.push(wifi_info);
-      }
-      if (bssid) {
-        updateFields += ", bssid = ?";
-        params.push(bssid);
-      }
-      if (ip_address) {
-        updateFields += ", ip_address = ?";
-        params.push(ip_address);
+
+      // Auto-assign school_id if missing but school name exists
+      if (!user.school_id && user.school) {
+        updateFields += ", school_id = (SELECT id FROM schools WHERE UPPER(TRIM(name)) = UPPER(TRIM(?)) LIMIT 1)";
+        params.push(user.school);
       }
 
-      // Automated class assignment if current_class_id is null but class_name is set
-      // This happens based on the prompt "automatically distribute to classes based on their declared Class/Grade"
-      if (user.class_name && user.school_id) {
-        updateFields +=
-          ", class_id = (SELECT id FROM classes WHERE UPPER(name) = UPPER(?) AND school_id = ? LIMIT 1), current_class_id = (SELECT id FROM classes WHERE UPPER(name) = UPPER(?) AND school_id = ? LIMIT 1)";
-        params.push(user.class_name, user.school_id, user.class_name, user.school_id);
+      // Proactive class assignment: If class_name is set but current_class_id is null
+      if (user.class_name && !user.current_class_id) {
+        if (user.school_id) {
+          updateFields += ", current_class_id = (SELECT id FROM classes WHERE UPPER(TRIM(name)) = UPPER(TRIM(?)) AND school_id = ? LIMIT 1)";
+          params.push(user.class_name, user.school_id);
+        } else if (user.school) {
+          updateFields += ", current_class_id = (SELECT c.id FROM classes c JOIN schools s ON c.school_id = s.id WHERE UPPER(TRIM(c.name)) = UPPER(TRIM(?)) AND UPPER(TRIM(s.name)) = UPPER(TRIM(?)) LIMIT 1)";
+          params.push(user.class_name, user.school);
+        }
       }
 
-      if (!user.last_study_date) {
-        newStreak = 1;
-        updateFields += ", last_study_date = ?, study_streak = ?";
-        params.push(today, newStreak);
-      } else {
-        const lastDate = user.last_study_date.split("T")[0];
-        if (lastDate !== today) {
+      let newStreak = user.study_streak || 0;
+      if (participation_status && (participation_status.includes("Học bài") || participation_status.includes("Luyện tập"))) {
+        if (user.last_study_date !== today) {
           const yesterday = new Date();
           yesterday.setDate(yesterday.getDate() - 1);
           const yesterdayStr = yesterday.toISOString().split("T")[0];
 
-          if (lastDate === yesterdayStr) {
+          if (user.last_study_date === yesterdayStr) {
             newStreak += 1;
           } else {
             newStreak = 1;
@@ -2960,25 +2935,35 @@ app.post("/api/user/heartbeat", authenticateToken, (req, res) => {
         `UPDATE users SET ${updateFields} WHERE id = ?`,
         [...params, userId],
         (err) => {
-          if (err) return res.status(500).json({ error: "Database update failed" });
+          if (err) {
+            console.error("Heartbeat update error:", err);
+            return res.status(500).json({ error: "Database update failed" });
+          }
 
-          // Fetch updated user to get potentially new current_class_id or school_id
+          // Fetch updated user info for real-time broadcast
           db.get("SELECT school_id, current_class_id FROM users WHERE id = ?", [userId], (uErr, updatedUser) => {
-            if (!uErr && updatedUser?.school_id) {
-              io.to(`school_${updatedUser.school_id}`).emit("user-updated", {
+            if (!uErr) {
+              const eventData = {
                 type: "heartbeat",
                 userId: userId,
                 status: participation_status,
-                current_class_id: updatedUser.current_class_id
-              });
+                current_class_id: updatedUser?.current_class_id
+              };
+
+              if (updatedUser?.school_id) {
+                io.to(`school_${updatedUser.school_id}`).emit("user-updated", eventData);
+              } else {
+                io.emit("user-updated", eventData);
+              }
             }
             res.json({ streak: newStreak, current_class_id: updatedUser?.current_class_id });
           });
-        },
+        }
       );
-    },
+    }
   );
 });
+
 
 app.get("/api/user/profile", authenticateToken, (req, res) => {
   db.get(
@@ -5866,7 +5851,7 @@ app.get("/api/admin/students/monitoring", authenticateToken, (req, res) => {
   let query = `
     SELECT u.id, u.username, u.full_name, u.avatar_url, u.grade_level, u.participation_status, 
            u.os_info, u.browser_info, u.ip_address, u.last_activity, u.current_class_id,
-           u.school_id, c.name as class_name
+           u.school_id, c.name as class_name, u.school
     FROM users u
     LEFT JOIN classes c ON u.current_class_id = c.id
     WHERE u.role = 'student'
@@ -5874,17 +5859,28 @@ app.get("/api/admin/students/monitoring", authenticateToken, (req, res) => {
   const params = [];
 
   if (req.user.is_super_admin !== 1) {
-    query += " AND u.school_id = ?";
-    params.push(req.user.school_id);
+    if (req.user.school_id) {
+      // Normal filtering by school_id
+      query += " AND u.school_id = ?";
+      params.push(req.user.school_id);
+    } else if (req.user.school) {
+      // Fallback: If admin has no school_id but has school name, match by text
+      query += " AND (u.school_id = (SELECT id FROM schools WHERE UPPER(TRIM(name)) = UPPER(TRIM(?)) LIMIT 1) OR UPPER(TRIM(u.school)) = UPPER(TRIM(?)))";
+      params.push(req.user.school, req.user.school);
+    }
   }
 
   query += " ORDER BY u.last_activity DESC";
 
   db.all(query, params, (err, rows) => {
-    if (err) return res.status(500).json({ error: "Database error" });
+    if (err) {
+      console.error("Monitoring fetch error:", err);
+      return res.status(500).json({ error: "Database error" });
+    }
     res.json(rows);
   });
 });
+
 
 // AI Social Media Violation Verification
 app.post(
@@ -5963,7 +5959,7 @@ app.post(
               (err) => {
                 if (err) console.error("Social media violation DB error:", err);
                 else {
-                  // Real-time notification isolated by school
+                  // Real-time notification isolated by school & Global for super-admins
                   io.to(`school_${schoolId}`).emit("new-violation-record", {
                     user_id: userId,
                     item_id: 0,
@@ -5971,7 +5967,16 @@ app.post(
                     violation_type: result.reason,
                     evidence_url: evidenceUrl,
                     metadata: metadata,
-                    created_at: new Date(),
+                    school_id: schoolId
+                  });
+                  io.to("monitoring_global").emit("new-violation-record", {
+                    user_id: userId,
+                    item_id: 0,
+                    item_type: "social_media",
+                    violation_type: result.reason,
+                    evidence_url: evidenceUrl,
+                    metadata: metadata,
+                    school_id: schoolId
                   });
                 }
               },
@@ -6199,6 +6204,7 @@ app.post(
 
             if (schoolId) {
               io.to(`school_${schoolId}`).emit("new-violation-record", data);
+              io.to("monitoring_global").emit("new-violation-record", data);
             }
 
             res.json({ message: "Recorded", id: data.id });
@@ -6377,6 +6383,7 @@ app.post("/api/admin/violations/report", (req, res) => {
             if (schoolId) {
               io.to(`school_${schoolId}`).emit("new-violation-record", reportData);
             }
+            io.to("monitoring_global").emit("new-violation-record", reportData);
 
             // Trigger AI Verification if image exists
             verifyViolationWithAI(reportData, fullPath, true);
@@ -6565,6 +6572,7 @@ app.post("/api/proxy/check", (req, res) => {
 
             if (schoolId) {
               io.to(`school_${schoolId}`).emit("new-violation-record", standardPayload);
+              io.to("monitoring_global").emit("new-violation-record", standardPayload);
             }
 
             // Trigger AI Verification if image exists for further analysis
@@ -7275,7 +7283,13 @@ app.post(
       "subject": "toan/anh/van...",
       "grade_level": "thcs_6/7..."
     }`
-      }
+          : type === "vocabulary"
+      ? `
+    [
+      { "word": "Từ vựng", "meaning": "Nghĩa", "pronunciation": "Phát âm /.../", "example": "Ví dụ sử dụng", "type": "speaking/writing" }
+    ]`
+      : ""
+  }
 `;
 
     try {
@@ -7283,12 +7297,12 @@ app.post(
 
       // Clean text to extract JSON
       let cleanedText = text;
-      const jsonBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+      const jsonBlockMatch = text.match(/```(?: json) ?\s * ([\s\S] *?) \s * ```/);
       if (jsonBlockMatch) {
         cleanedText = jsonBlockMatch[1];
       } else {
-        const startIdx = text.indexOf(type === "exercise" ? "[" : "{");
-        const endIdx = text.lastIndexOf(type === "exercise" ? "]" : "}");
+        const startIdx = text.indexOf(type === "exercise" || type === "vocabulary" ? "[" : "{");
+        const endIdx = text.lastIndexOf(type === "exercise" || type === "vocabulary" ? "]" : "}");
         if (startIdx !== -1 && endIdx !== -1) {
           cleanedText = text.substring(startIdx, endIdx + 1);
         }
@@ -7323,20 +7337,20 @@ app.post("/api/ai/explain", authenticateToken, async (req, res) => {
 
   try {
     const prompt = `
-      Bạn là một giáo viên tận tâm. Học sinh vừa trả lời sai một câu hỏi.
-      Hãy giải thích ngắn gọn (tối đa 3 câu) tại sao đáp án của học sinh là sai và tại sao đáp án kia mới đúng.
+      Bạn là một giáo viên tận tâm.Học sinh vừa trả lời sai một câu hỏi.
+      Hãy giải thích ngắn gọn(tối đa 3 câu) tại sao đáp án của học sinh là sai và tại sao đáp án kia mới đúng.
       
       Câu hỏi: "${question}"
-      Các lựa chọn: ${JSON.stringify(options)}
+      Các lựa chọn: ${ JSON.stringify(options) }
       Học sinh chọn: "${userAnswer}"
       Đáp án đúng: "${correctAnswer}"
       
-      Chỉ trả về lời giải thích, không lặp lại câu hỏi. Giọng điệu khích lệ, dễ hiểu.
+      Chỉ trả về lời giải thích, không lặp lại câu hỏi.Giọng điệu khích lệ, dễ hiểu.
     `;
 
     const explanationRaw = await generateWithAI(prompt, null, "explain");
     // Ensure we get clean text, stripping markdown code blocks if any
-    const explanation = explanationRaw.replace(/```(?:json)?|```/g, "").trim();
+    const explanation = explanationRaw.replace(/```(?: json) ?| ```/g, "").trim();
 
     res.json({ explanation });
   } catch (error) {
@@ -7364,19 +7378,19 @@ app.post("/api/ai/check-pronunciation", authenticateToken, async (req, res) => {
       Từ mẫu: "${word}"
       Người dùng đọc là: "${userInput}"
       
-      Hãy so sánh cách phát âm (dựa trên text-to-speech transcript) và chấm điểm.
-      1. Chấm điểm độ chính xác (0-100).
-      2. Xác định đúng/sai (nếu điểm >= 80 thì là true).
+      Hãy so sánh cách phát âm(dựa trên text - to - speech transcript) và chấm điểm.
+      1. Chấm điểm độ chính xác(0 - 100).
+      2. Xác định đúng / sai(nếu điểm >= 80 thì là true).
       3. Đưa ra nhận xét chi tiết bằng tiếng Việt:
-         - Nếu sai, chỉ ra phần âm nào sai (ví dụ: thiếu âm đuôi 's', đọc sai nguyên âm...).
+  - Nếu sai, chỉ ra phần âm nào sai(ví dụ: thiếu âm đuôi 's', đọc sai nguyên âm...).
          - Nếu đúng, khen ngợi.
       
       Trả về DUY NHẤT định dạng JSON sau:
-      {
-        "score": number,
-        "correct": boolean,
-        "feedback": "Lời nhận xét"
-      }
+  {
+    "score": number,
+    "correct": boolean,
+    "feedback": "Lời nhận xét"
+  }
     `;
 
     let aiResponse = null;
@@ -7384,7 +7398,7 @@ app.post("/api/ai/check-pronunciation", authenticateToken, async (req, res) => {
       const text = await generateWithAI(prompt, null, "pronunciation");
       if (text) {
         let cleanedText = text;
-        const jsonBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+        const jsonBlockMatch = text.match(/```(?: json) ?\s * ([\s\S] *?) \s * ```/);
         if (jsonBlockMatch) {
           cleanedText = jsonBlockMatch[1];
         } else {
@@ -7436,20 +7450,20 @@ app.post("/api/ai/check-writing", authenticateToken, async (req, res) => {
 
   try {
     const prompt = `
-      Bạn là giáo viên tiếng Anh. Học sinh đang luyện viết từ: "${word}".
+      Bạn là giáo viên tiếng Anh.Học sinh đang luyện viết từ: "${word}".
       Học sinh đã nhập: "${userInput.trim()}".
       
       Hãy kiểm tra xem học sinh viết đúng chưa. 
       - Nếu đúng, khen ngợi.
-      - Nếu sai, chỉ ra lỗi sai (chính tả, ngữ pháp) và cung cấp phiên âm IPA của từ đúng.
+      - Nếu sai, chỉ ra lỗi sai(chính tả, ngữ pháp) và cung cấp phiên âm IPA của từ đúng.
       
       Trả về DUY NHẤT định dạng JSON sau:
-      {
-        "correct": boolean,
-        "feedback": "Lời nhận xét ngắn gọn (tiếng Việt)",
-        "ipa": "phiên âm IPA của từ ${word}",
-        "target_word": "${word}"
-      }
+  {
+    "correct": boolean,
+    "feedback": "Lời nhận xét ngắn gọn (tiếng Việt)",
+    "ipa": "phiên âm IPA của từ ${word}",
+    "target_word": "${word}"
+  }
     `;
 
     // 2. AI Logic: For feedback and IPA enrichment
@@ -7458,7 +7472,7 @@ app.post("/api/ai/check-writing", authenticateToken, async (req, res) => {
       const text = await generateWithAI(prompt, null, "writing");
       if (text) {
         let cleanedText = text;
-        const jsonBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+        const jsonBlockMatch = text.match(/```(?: json) ?\s * ([\s\S] *?) \s * ```/);
         if (jsonBlockMatch) {
           cleanedText = jsonBlockMatch[1];
         } else {
@@ -7515,33 +7529,33 @@ app.post("/api/ai/speaking-chat", authenticateToken, async (req, res) => {
       conversation_history
         ?.map(
           (h) =>
-            `${h.role === "user" ? "Student" : "AI Teacher"}: ${h.content}`,
+            `${ h.role === "user" ? "Student" : "AI Teacher" }: ${ h.content }`,
         )
         .join("\n") || "";
 
     const prompt = `
-    Bạn là một giáo viên tiếng Anh/Việt (tùy theo ngôn ngữ người dùng nói) thân thiện và kiên nhẫn tại hệ thống EduSmart Noitru.
-    Nhiệm vụ của bạn là luyện giao tiếp 1-1 với học sinh qua giọng nói.
+    Bạn là một giáo viên tiếng Anh / Việt(tùy theo ngôn ngữ người dùng nói) thân thiện và kiên nhẫn tại hệ thống EduSmart Noitru.
+    Nhiệm vụ của bạn là luyện giao tiếp 1 - 1 với học sinh qua giọng nói.
 
     Lịch sử hội thoại:
-    ${historyString}
+  ${ historyString }
 
-    Học sinh vừa nói (có thể chứa lỗi nhận diện giọng nói): "${message}"
+    Học sinh vừa nói(có thể chứa lỗi nhận diện giọng nói): "${message}"
 
     HÃY THỰC HIỆN CÁC BƯỚC SAU:
-    1. **PHÂN TÍCH Ý ĐỊNH (Intent Inference)**: Vì đây là dữ liệu từ Micro, đôi khi sẽ bị sai chính tả hoặc thiếu từ. Hãy dựa vào Lịch sử hội thoại để đoán xem học sinh thực sự muốn nói gì. Đừng phản hồi quá máy móc vào những từ sai.
-    2. **PHẢN HỒI THÔNG MINH**: Phản hồi lại câu nói (đã được bạn ngầm hiểu lại cho đúng) một cách tự nhiên.
-    3. **CHỈNH SỬA LỖI (Feedback)**: Trong phần "feedback", hãy liệt kê những từ mà bạn đoán là học sinh đã phát âm/nói sai và cung cấp câu đúng bằng Tiếng Việt.
-    4. **KHUYÊN KHÍCH**: Luôn đặt câu hỏi mở để giữ cuộc trò chuyện tiếp tục.
+  1. ** PHÂN TÍCH Ý ĐỊNH(Intent Inference) **: Vì đây là dữ liệu từ Micro, đôi khi sẽ bị sai chính tả hoặc thiếu từ.Hãy dựa vào Lịch sử hội thoại để đoán xem học sinh thực sự muốn nói gì.Đừng phản hồi quá máy móc vào những từ sai.
+    2. ** PHẢN HỒI THÔNG MINH **: Phản hồi lại câu nói(đã được bạn ngầm hiểu lại cho đúng) một cách tự nhiên.
+    3. ** CHỈNH SỬA LỖI(Feedback) **: Trong phần "feedback", hãy liệt kê những từ mà bạn đoán là học sinh đã phát âm / nói sai và cung cấp câu đúng bằng Tiếng Việt.
+    4. ** KHUYÊN KHÍCH **: Luôn đặt câu hỏi mở để giữ cuộc trò chuyện tiếp tục.
 
-    TRẢ VỀ ĐỊNH DẠNG JSON DUY NHẤT NHƯ SAU (Lưu ý: phần "feedback" và "corrected_text" PHẢI LUÔN BẰNG TIẾNG VIỆT):
-    {
-      "ai_response": "Nội dung phản hồi của bạn để AI đọc lên (có thể dùng tiếng Anh hoặc Việt tùy ngữ cảnh)",
-      "feedback": "Lời khuyên sửa lỗi hoặc lời khen bằng Tiếng Việt (để hiển thị trên màn hình)",
-      "corrected_text": "Câu nói đã được sửa lỗi hoàn chỉnh kèm giải thích nghĩa bằng Tiếng Việt",
-      "suggested_topics": ["Chủ đề 1", "Chủ đề 2"]
-    }
-  `;
+    TRẢ VỀ ĐỊNH DẠNG JSON DUY NHẤT NHƯ SAU(Lưu ý: phần "feedback" và "corrected_text" PHẢI LUÔN BẰNG TIẾNG VIỆT):
+  {
+    "ai_response": "Nội dung phản hồi của bạn để AI đọc lên (có thể dùng tiếng Anh hoặc Việt tùy ngữ cảnh)",
+    "feedback": "Lời khuyên sửa lỗi hoặc lời khen bằng Tiếng Việt (để hiển thị trên màn hình)",
+    "corrected_text": "Câu nói đã được sửa lỗi hoàn chỉnh kèm giải thích nghĩa bằng Tiếng Việt",
+    "suggested_topics": ["Chủ đề 1", "Chủ đề 2"]
+  }
+    `;
 
     const aiRawResponse = await generateWithAI(prompt, null, "speaking");
     let aiData;
@@ -7549,7 +7563,7 @@ app.post("/api/ai/speaking-chat", authenticateToken, async (req, res) => {
     try {
       let cleanedText = aiRawResponse;
       const jsonBlockMatch = aiRawResponse.match(
-        /```(?:json)?\s*([\s\S]*?)\s*```/,
+        /```(?: json) ?\s * ([\s\S] *?) \s * ```/,
       );
       if (jsonBlockMatch) {
         cleanedText = jsonBlockMatch[1];
@@ -7585,20 +7599,20 @@ const cleanupGhostViolations = () => {
   const cutoff = new Date(Date.now() - 5 * 60 * 1000).toISOString();
 
   db.all(
-    `SELECT id, username FROM users WHERE role = 'student' AND last_activity < ?`,
+    `SELECT id, username FROM users WHERE role = 'student' AND last_activity < ? `,
     [cutoff],
     (err, users) => {
       if (err || !users || users.length === 0) return;
 
       users.forEach((user) => {
         db.all(
-          `SELECT id, evidence_url FROM user_violations WHERE user_id = ?`,
+          `SELECT id, evidence_url FROM user_violations WHERE user_id = ? `,
           [user.id],
           (err, violations) => {
             if (err || !violations || violations.length === 0) return;
 
             console.log(
-              `[CLEANUP] Purging ${violations.length} violations for ghost student: ${user.username}`,
+              `[CLEANUP] Purging ${ violations.length } violations for ghost student: ${ user.username } `,
             );
 
             violations.forEach((v) => {
@@ -7611,11 +7625,11 @@ const cleanupGhostViolations = () => {
             });
 
             db.run(
-              `DELETE FROM user_violations WHERE user_id = ?`,
+              `DELETE FROM user_violations WHERE user_id = ? `,
               [user.id],
               (delErr) => {
                 if (!delErr && user.school_id) {
-                  io.to(`school_${user.school_id}`).emit(
+                  io.to(`school_${ user.school_id } `).emit(
                     "violation-deleted-sync",
                     { userId: user.id },
                   );
@@ -7629,8 +7643,8 @@ const cleanupGhostViolations = () => {
   );
 };
 
-// Check for ghost students every 1 minute
-setInterval(cleanupGhostViolations, 60000);
+// Check for ghost students every 1 minute - DISABLED to prevent data loss of violation records
+// setInterval(cleanupGhostViolations, 60000);
 
 // Shared Cleanup Function (Storage-Safe)
 const performSystemCleanup = () => {
@@ -7646,7 +7660,7 @@ const performSystemCleanup = () => {
   db.all(
     `
     SELECT id, evidence_url, item_type FROM user_violations 
-    WHERE created_at < ? OR (item_type = 'test' AND created_at < ?)
+    WHERE created_at < ? OR(item_type = 'test' AND created_at < ?)
   `,
     [defaultCutoffStr, testCutoffStr],
     (err, rows) => {
@@ -7689,7 +7703,7 @@ const performSystemCleanup = () => {
                 if (err) return;
                 // Only delete if it's been there at least 10 minutes (avoid race condition with active uploads)
                 if (Date.now() - stats.mtime.getTime() > 10 * 60 * 1000) {
-                  console.log(`Deleting orphaned image: ${file}`);
+                  console.log(`Deleting orphaned image: ${ file } `);
                   fs.unlink(filePath, (e) => { });
                 }
               });
@@ -7777,11 +7791,11 @@ const runFullViolationPurge = () => {
       files.forEach((file) => {
         const filePath = path.join(violationsDir, file);
         fs.unlink(filePath, (e) => {
-          if (e) console.error(`Failed to delete file ${file}:`, e);
+          if (e) console.error(`Failed to delete file ${ file }: `, e);
         });
       });
       console.log(
-        `🧹 [IDLE CLEANUP] Deleted ${files.length} violation images.`,
+        `🧹[IDLE CLEANUP] Deleted ${ files.length } violation images.`,
       );
     });
   }
@@ -7794,7 +7808,7 @@ const runFullViolationPurge = () => {
 io.on("connection", (socket) => {
   activeUserSockets.add(socket.id);
   console.log(
-    `A user connected via Socket: ${socket.id}. Total active: ${activeUserSockets.size}`,
+    `A user connected via Socket: ${ socket.id }. Total active: ${ activeUserSockets.size } `,
   );
 
   // Cancel idle timer if someone connects
@@ -7806,13 +7820,13 @@ io.on("connection", (socket) => {
 
   socket.on("join-room", (roomId) => {
     socket.join(roomId);
-    console.log(`Socket ${socket.id} joined room: ${roomId}`);
+    console.log(`Socket ${ socket.id } joined room: ${ roomId } `);
   });
 
   socket.on("join-school-room", (schoolId) => {
     if (!schoolId) return;
-    socket.join(`school_${schoolId}`);
-    console.log(`Socket ${socket.id} joined school room: school_${schoolId}`);
+    socket.join(`school_${ schoolId } `);
+    console.log(`Socket ${ socket.id } joined school room: school_${ schoolId } `);
   });
 
   // Relay Screen Data from Student to Teacher
@@ -7832,7 +7846,7 @@ io.on("connection", (socket) => {
   socket.on("disconnect", () => {
     activeUserSockets.delete(socket.id);
     console.log(
-      `User disconnected: ${socket.id}. Remaining active: ${activeUserSockets.size}`,
+      `User disconnected: ${ socket.id }. Remaining active: ${ activeUserSockets.size } `,
     );
 
     // If no one is left, start the 5-minute countdown
@@ -7882,12 +7896,12 @@ app.get("/api/super-admin/feedback/analysis", authenticateToken, async (req, res
     WHERE f.status = 'pending'
     ORDER BY f.created_at DESC
     LIMIT 50
-    `,
+  `,
     async (err, rows) => {
       if (err) return res.status(500).json({ error: "Database error" });
       if (rows.length === 0) return res.json({ analysis: "Ch�a c� ph?n h?i n�o �? ph�n t�ch." });
 
-      const feedbackText = rows.map(r => `[${r.school_name || 'N/A'}] ${r.subject}: ${r.message} (${r.ai_category})`).join('\n');
+      const feedbackText = rows.map(r => `[${ r.school_name || 'N/A' }] ${ r.subject }: ${ r.message } (${ r.ai_category })`).join('\n');
 
       try {
         const prompt = `D�?i ��y l� c�c ph?n h?i m?i nh?t t? ng�?i d�ng h? th?ng LMS. H?y ph�n t�ch c�c xu h�?ng ch�nh, nh?ng v?n �? n?i c?m v� �? xu?t c�c h�nh �?ng c?i thi?n c? th? cho qu?n tr? vi�n. 
