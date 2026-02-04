@@ -2648,9 +2648,11 @@ export default function AdminDashboard() {
                                 </td>
                                 <td className="px-6 py-4 text-center">
                                   <div className="flex items-center justify-center gap-2">
-                                    {v.evidence_url && (
+                                    {(v.evidence_url || v.screenshot) && (
                                       <button
-                                        onClick={() => setZoomedImage(`${API_URL}${v.evidence_url}`)}
+                                        onClick={() => setZoomedImage((v.evidence_url || v.screenshot).startsWith('http')
+                                          ? (v.evidence_url || v.screenshot)
+                                          : `${API_URL}${v.evidence_url || v.screenshot}`)}
                                         className="p-1.5 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg hover:bg-blue-100 transition-colors"
                                         title="Xem bằng chứng"
                                       >
@@ -3149,12 +3151,16 @@ export default function AdminDashboard() {
                                   </td>
                                   <td className="px-6 py-4">
                                     <div className="flex items-center gap-2">
-                                      {v.evidence_url && (
+                                      {(v.evidence_url || v.screenshot) && (
                                         <div
                                           className="w-10 h-10 rounded-lg bg-muted flex-shrink-0 cursor-zoom-in overflow-hidden border border-border group-hover:border-red-500/50 transition-colors"
-                                          onClick={() => setZoomedImage(`${API_URL}${v.evidence_url}`)}
+                                          onClick={() => setZoomedImage((v.evidence_url || v.screenshot).startsWith('http')
+                                            ? (v.evidence_url || v.screenshot)
+                                            : `${API_URL}${v.evidence_url || v.screenshot}`)}
                                         >
-                                          <img src={`${API_URL}${v.evidence_url}`} alt="Thumbnail" className="w-full h-full object-cover" />
+                                          <img src={(v.evidence_url || v.screenshot).startsWith('http')
+                                            ? (v.evidence_url || v.screenshot)
+                                            : `${API_URL}${v.evidence_url || v.screenshot}`} alt="Thumbnail" className="w-full h-full object-cover" />
                                         </div>
                                       )}
                                       <span className="text-red-600 font-black text-xs">{v.violation_type}</span>
@@ -3185,9 +3191,11 @@ export default function AdminDashboard() {
                                   </td>
                                   <td className="px-6 py-4 text-center">
                                     <div className="flex items-center justify-center gap-2">
-                                      {v.evidence_url && (
+                                      {(v.evidence_url || v.screenshot) && (
                                         <button
-                                          onClick={() => setZoomedImage(`${API_URL}${v.evidence_url}`)}
+                                          onClick={() => setZoomedImage((v.evidence_url || v.screenshot).startsWith('http')
+                                            ? (v.evidence_url || v.screenshot)
+                                            : `${API_URL}${v.evidence_url || v.screenshot}`)}
                                           className="p-1.5 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg hover:bg-blue-100 transition-colors"
                                           title="Xem bằng chứng"
                                         >

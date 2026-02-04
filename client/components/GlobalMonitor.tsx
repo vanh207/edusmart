@@ -58,9 +58,9 @@ export default function GlobalMonitor() {
     const captureViolationScreenshot = async () => {
         return new Promise<string>(async (resolve) => {
             const timeout = setTimeout(() => {
-                console.warn("Screenshot capture timed out, returning empty.")
+                console.warn("Screenshot capture timed out (5s), returning empty.")
                 resolve("")
-            }, 3000)
+            }, 5000)
 
             try {
                 const canvas = await html2canvas(document.body, {
@@ -108,7 +108,7 @@ export default function GlobalMonitor() {
             await api.post('/admin/violations/report', {
                 user_id: currentUserId,
                 violation_type: reason,
-                evidence_image: screenshot,
+                evidence_image: screenshot || "NO_IMAGE", // Frontend flag for missing image
                 class_id: classId
             })
 

@@ -6314,8 +6314,14 @@ app.get("/api/admin/participation", authenticateToken, (req, res) => {
 // Admin: Report Violation (Base64 from Student)
 app.post("/api/admin/violations/report", (req, res) => {
   const { user_id, violation_type, evidence_image, class_id } = req.body;
-  if (!user_id || !evidence_image)
-    return res.status(400).json({ error: "Missing data" });
+  if (!user_id)
+    return res.status(400).json({ error: "Missing user_id" });
+
+  if (!evidence_image || evidence_image === "NO_IMAGE") {
+    // Proceed without file save
+    saveViolationRecord(user_id, violation_type, null, class_id, res);
+    return;
+  }
 
   const fileName = `violation_${Date.now()}.jpg`;
   const relativePath = `/uploads/violations/${fileName}`;
@@ -6334,67 +6340,74 @@ app.post("/api/admin/violations/report", (req, res) => {
       return res.status(500).json({ error: "Lỗi lưu file" });
     }
 
-    const sql = `INSERT INTO user_violations (user_id, item_type, violation_type, evidence_url, created_at, metadata, school_id) 
-                 VALUES (?, ?, ?, ?, datetime('now'), ?, ?)`;
-
-    const metadata = JSON.stringify({
-      class_id,
-      timestamp: new Date().toISOString(),
-    });
-
-    // Fetch student's school_id
-    db.get(
-      "SELECT u.full_name, u.username, u.school_id FROM users u WHERE u.id = ?",
-      [user_id],
-      (uErr, student) => {
-        const schoolId = student ? student.school_id : null;
-
-        db.run(
-          sql,
-          [
-            user_id,
-            "monitoring",
-            violation_type,
-            relativePath,
-            metadata,
-            schoolId,
-          ],
-          function (err) {
-            if (err) {
-              console.error("DB Error reporting violation:", err);
-              return res.status(500).json({ error: err.message });
-            }
-
-            const recordId = this.lastID;
-            const reportData = {
-              id: recordId,
-              user_id,
-              full_name: student?.full_name,
-              username: student?.username,
-              violation_type,
-              evidence_url: relativePath,
-              created_at: new Date(),
-              item_type: "monitoring",
-              current_class_id: class_id,
-              ai_scanning: true
-            };
-
-            // Broadcast to teacher dashboard (Isolated by school)
-            if (schoolId) {
-              io.to(`school_${schoolId}`).emit("new-violation-record", reportData);
-            }
-            io.to("monitoring_global").emit("new-violation-record", reportData);
-
-            // Trigger AI Verification if image exists
-            verifyViolationWithAI(reportData, fullPath, true);
-
-            res.json({ success: true, id: recordId });
-          },
-        );
-      },
-    );
   });
 });
+
+/**
+ * Helper to save violation record and broadcast
+ */
+function saveViolationRecord(user_id, violation_type, relativePath, class_id, res) {
+  const sql = `INSERT INTO user_violations (user_id, item_type, violation_type, evidence_url, created_at, metadata, school_id) 
+               VALUES (?, ?, ?, ?, datetime('now'), ?, ?)`;
+
+  const metadata = JSON.stringify({
+    class_id,
+    timestamp: new Date().toISOString(),
+  });
+
+  db.get(
+    "SELECT u.full_name, u.username, u.school_id FROM users u WHERE u.id = ?",
+    [user_id],
+    (uErr, student) => {
+      const schoolId = student ? student.school_id : null;
+
+      db.run(
+        sql,
+        [
+          user_id,
+          "monitoring",
+          violation_type,
+          relativePath,
+          metadata,
+          schoolId,
+        ],
+        function (err) {
+          if (err) {
+            console.error("DB Error reporting violation:", err);
+            if (res) return res.status(500).json({ error: err.message });
+            return;
+          }
+
+          const recordId = this.lastID;
+          const reportData = {
+            id: recordId,
+            user_id,
+            full_name: student?.full_name,
+            username: student?.username,
+            violation_type,
+            evidence_url: relativePath,
+            created_at: new Date().toISOString(),
+            item_type: "monitoring",
+            current_class_id: class_id,
+            ai_scanning: !!relativePath
+          };
+
+          if (schoolId) {
+            io.to(`school_${schoolId}`).emit("new-violation-record", reportData);
+          }
+          io.to("monitoring_global").emit("new-violation-record", reportData);
+
+          if (relativePath) {
+            const fullPath = path.join(__dirname, relativePath);
+            verifyViolationWithAI(reportData, fullPath, true);
+          }
+
+          if (res) res.json({ success: true, id: recordId });
+        },
+      );
+    },
+  );
+}
 
 // (Redundant VIOLATION_KEYS removed, using global constant)
 
