@@ -152,6 +152,20 @@ export default function AdminDashboard() {
   const [violationTypeFilter, setViolationTypeFilter] = useState('all')
   const [violationClassFilter, setViolationClassFilter] = useState('all')
 
+  // Helper function to get correct image URL
+  const getImageUrl = (path: string | null | undefined, type: 'avatar' | 'evidence' | 'general' = 'evidence', seed?: string) => {
+    if (!path || path === '') {
+      if (type === 'avatar' && seed) {
+        return `https://api.dicebear.com/7.x/avataaars/svg?seed=${seed}`;
+      }
+      return '';
+    }
+    if (path.startsWith('http')) return path;
+    if (path.startsWith('data:image')) return path; // Handle base64
+    const cleanPath = path.startsWith('/') ? path : `/${path}`;
+    return `${API_URL}${cleanPath}`;
+  };
+
   // Class Management UI States
   const [showClassModal, setShowClassModal] = useState(false)
   const [classFormData, setClassFormData] = useState<any>({ name: '', grade_level: '', teacher_id: '' })
@@ -233,17 +247,8 @@ export default function AdminDashboard() {
           console.log('Super Admin joining global monitoring room')
         }
 
-        /* 
-        // Auto-purge violations when Admin starts the dashboard - DISABLING as it causes data loss
-        if (userData.role === 'admin' || userData.role === 'teacher') {
-          try {
-            await adminAPI.purgeViolations()
-            console.log('Successfully purged violations on dashboard start')
-          } catch (purgeErr) {
-            console.error('Failed to auto-purge violations:', purgeErr)
-          }
-        }
-        */
+        // Load settings with school_id immediately
+        loadGlobalSettings(userData.school_id)
       } catch (error) {
         console.error('Error fetching admin profile:', error)
         router.push('/login/admin')
@@ -253,7 +258,6 @@ export default function AdminDashboard() {
     fetchData()
     loadStatistics()
     loadClasses()
-    loadGlobalSettings()
     loadAnnouncements()
     if (user?.is_super_admin === 1) {
       loadFeedbackList()
@@ -383,9 +387,9 @@ export default function AdminDashboard() {
     }
   }
 
-  const loadGlobalSettings = async () => {
+  const loadGlobalSettings = async (schoolId?: number) => {
     try {
-      const res = await adminAPI.getProctoringStatus()
+      const res = await adminAPI.getProctoringStatus(schoolId)
       if (res.data) {
         setIsGlobalProctoring(res.data.proctoring_enabled === true || res.data.proctoring_enabled === '1' || res.data.proctoring_enabled === 1)
         setIsGlobalSocialMonitoring(res.data.social_monitoring_enabled === true || res.data.social_monitoring_enabled === '1' || res.data.social_monitoring_enabled === 1)
@@ -1840,7 +1844,7 @@ export default function AdminDashboard() {
               <Link href="/profile" className="w-10 h-10 rounded-full overflow-hidden border-2 border-white shadow-lg hover:scale-110 transition-transform bg-gradient-to-tr from-blue-600 to-purple-600 flex items-center justify-center text-white font-bold">
                 {user?.avatar_url ? (
                   <img
-                    src={`${API_URL}${user.avatar_url}`}
+                    src={getImageUrl(user.avatar_url, 'avatar', user.username)}
                     alt="avatar"
                     className="w-full h-full object-cover"
                   />
@@ -2659,7 +2663,7 @@ export default function AdminDashboard() {
                                     {v.evidence_url && (
                                       <div
                                         className="w-8 h-8 rounded bg-muted flex-shrink-0 cursor-zoom-in overflow-hidden border border-border"
-                                        onClick={() => setZoomedImage(`${API_URL}${v.evidence_url}`)}
+                                        onClick={() => setZoomedImage(getImageUrl(v.evidence_url))}
                                       >
                                         <img src={`${API_URL}${v.evidence_url}`} alt="Thumbnail" className="w-full h-full object-cover" />
                                       </div>
@@ -2671,9 +2675,7 @@ export default function AdminDashboard() {
                                   <div className="flex items-center justify-center gap-2">
                                     {(v.evidence_url || v.screenshot) && (
                                       <button
-                                        onClick={() => setZoomedImage((v.evidence_url || v.screenshot).startsWith('http')
-                                          ? (v.evidence_url || v.screenshot)
-                                          : `${API_URL}${v.evidence_url || v.screenshot}`)}
+                                        onClick={() => setZoomedImage(getImageUrl(v.evidence_url || v.screenshot))}
                                         className="p-1.5 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg hover:bg-blue-100 transition-colors"
                                         title="Xem bằng chứng"
                                       >
@@ -2734,7 +2736,7 @@ export default function AdminDashboard() {
                           <div className="relative">
                             <div className={`w-16 h-16 rounded-2xl overflow-hidden border-2 ${idx === 0 ? 'border-amber-400' : idx === 1 ? 'border-slate-300' : idx === 2 ? 'border-orange-300' : 'border-border'}`}>
                               <img
-                                src={u.avatar_url ? `${API_URL}${u.avatar_url}` : `https://api.dicebear.com/7.x/avataaars/svg?seed=${u.username}`}
+                                src={getImageUrl(u.avatar_url, 'avatar', u.username)}
                                 className="w-full h-full object-cover"
                                 alt={u.username}
                               />
@@ -2995,7 +2997,7 @@ export default function AdminDashboard() {
                               <div className="flex items-center gap-4 mb-6">
                                 <div className="w-16 h-16 rounded-2xl overflow-hidden border-2 border-white shadow-sm group-hover:scale-105 transition-transform">
                                   <img
-                                    src={s.avatar_url ? `${API_URL}${s.avatar_url}` : `https://api.dicebear.com/7.x/avataaars/svg?seed=${s.username}`}
+                                    src={getImageUrl(s.avatar_url, 'avatar', s.username)}
                                     className="w-full h-full object-cover"
                                     alt={s.username}
                                   />
@@ -3148,7 +3150,7 @@ export default function AdminDashboard() {
                                   <td className="px-6 py-4">
                                     <div className="flex items-center gap-3">
                                       <div className="w-8 h-8 rounded-full bg-slate-200 overflow-hidden flex-shrink-0">
-                                        <img src={v.avatar_url ? `${API_URL}${v.avatar_url}` : `https://api.dicebear.com/7.x/avataaars/svg?seed=${v.username}`} alt="avatar" />
+                                        <img src={getImageUrl(v.avatar_url, 'avatar', v.username)} alt="avatar" />
                                       </div>
                                       <div>
                                         <span className="font-bold block text-xs">{v.full_name || v.username || 'Học sinh'}</span>
@@ -3175,13 +3177,9 @@ export default function AdminDashboard() {
                                       {(v.evidence_url || v.screenshot) && (
                                         <div
                                           className="w-10 h-10 rounded-lg bg-muted flex-shrink-0 cursor-zoom-in overflow-hidden border border-border group-hover:border-red-500/50 transition-colors"
-                                          onClick={() => setZoomedImage((v.evidence_url || v.screenshot).startsWith('http')
-                                            ? (v.evidence_url || v.screenshot)
-                                            : `${API_URL}${v.evidence_url || v.screenshot}`)}
+                                          onClick={() => setZoomedImage(getImageUrl(v.evidence_url || v.screenshot))}
                                         >
-                                          <img src={(v.evidence_url || v.screenshot).startsWith('http')
-                                            ? (v.evidence_url || v.screenshot)
-                                            : `${API_URL}${v.evidence_url || v.screenshot}`} alt="Thumbnail" className="w-full h-full object-cover" />
+                                          <img src={getImageUrl(v.evidence_url || v.screenshot)} alt="Thumbnail" className="w-full h-full object-cover" />
                                         </div>
                                       )}
                                       <span className="text-red-600 font-black text-xs">{v.violation_type}</span>
@@ -3214,9 +3212,7 @@ export default function AdminDashboard() {
                                     <div className="flex items-center justify-center gap-2">
                                       {(v.evidence_url || v.screenshot) && (
                                         <button
-                                          onClick={() => setZoomedImage((v.evidence_url || v.screenshot).startsWith('http')
-                                            ? (v.evidence_url || v.screenshot)
-                                            : `${API_URL}${v.evidence_url || v.screenshot}`)}
+                                          onClick={() => setZoomedImage(getImageUrl(v.evidence_url || v.screenshot))}
                                           className="p-1.5 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg hover:bg-blue-100 transition-colors"
                                           title="Xem bằng chứng"
                                         >
@@ -3366,7 +3362,7 @@ export default function AdminDashboard() {
                                 <div className="flex items-center gap-3">
                                   <div className="w-10 h-10 rounded-full bg-gray-200 border-2 border-white overflow-hidden shadow-sm flex-shrink-0">
                                     <img
-                                      src={u.avatar_url ? `${API_URL}${u.avatar_url}` : `https://api.dicebear.com/7.x/avataaars/svg?seed=${u.username}`}
+                                      src={getImageUrl(u.avatar_url, 'avatar', u.username)}
                                       alt={u.username}
                                       className="w-full h-full object-cover"
                                     />
@@ -5325,7 +5321,7 @@ export default function AdminDashboard() {
                       <div className="w-32 h-32 rounded-3xl bg-white p-1 shadow-2xl mx-auto">
                         <div className="w-full h-full rounded-2xl bg-gray-100 overflow-hidden">
                           <img
-                            src={selectedUser.avatar_url ? `${API_URL}${selectedUser.avatar_url}` : `https://api.dicebear.com/7.x/avataaars/svg?seed=${selectedUser.username}`}
+                            src={getImageUrl(selectedUser.avatar_url, 'avatar', selectedUser.username)}
                             alt={selectedUser.username}
                             className="w-full h-full object-cover"
                           />
@@ -5972,11 +5968,7 @@ export default function AdminDashboard() {
                         <div className="relative rounded-[2rem] overflow-hidden border-4 border-slate-100 shadow-2xl bg-slate-50">
                           {(selectedSubmission.evidence_url || selectedSubmission.screenshot) ? (
                             <img
-                              src={
-                                (selectedSubmission.evidence_url || selectedSubmission.screenshot).startsWith('http')
-                                  ? (selectedSubmission.evidence_url || selectedSubmission.screenshot)
-                                  : `${API_URL}${selectedSubmission.evidence_url || selectedSubmission.screenshot}`
-                              }
+                              src={getImageUrl(selectedSubmission.evidence_url || selectedSubmission.screenshot)}
                               alt="Violation Proof"
                               className="w-full h-auto"
                             />
@@ -6082,7 +6074,7 @@ export default function AdminDashboard() {
                                           {selectedSubmission.file_url && idx === 0 && (
                                             <div className="mt-4 pt-4 border-t border-slate-100">
                                               <a
-                                                href={selectedSubmission.file_url.startsWith('http') ? selectedSubmission.file_url : `${API_URL}${selectedSubmission.file_url}`}
+                                                href={getImageUrl(selectedSubmission.file_url)}
                                                 target="_blank"
                                                 rel="noopener noreferrer"
                                                 className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-600 rounded-xl font-black text-[10px] hover:bg-emerald-100 transition-all border border-emerald-100"
@@ -6262,7 +6254,7 @@ export default function AdminDashboard() {
                       <div key={student.id} className="p-5 bg-muted/40 rounded-2xl border border-border flex items-center gap-4 group hover:bg-muted/60 transition-all">
                         <div className="w-12 h-12 rounded-xl overflow-hidden bg-background border border-border flex items-center justify-center font-bold text-blue-600">
                           {student.avatar_url ? (
-                            <img src={`${API_URL}${student.avatar_url}`} alt="" className="w-full h-full object-cover" />
+                            <img src={getImageUrl(student.avatar_url, 'avatar', student.username)} alt="" className="w-full h-full object-cover" />
                           ) : (
                             student.username.charAt(0).toUpperCase()
                           )}

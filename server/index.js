@@ -145,8 +145,9 @@ if (process.env.NODE_ENV === 'production' && JWT_SECRET === "your-secret-key-cha
 // Middleware
 // Apply Helmet for security headers
 app.use(helmet({
-  contentSecurityPolicy: false, // Disable CSP for now (can enable later with proper config)
-  crossOriginEmbedderPolicy: false // Allow embedding for development
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false,
+  crossOriginResourcePolicy: { policy: "cross-origin" }
 }));
 
 // Apply XSS protection
@@ -6509,7 +6510,9 @@ app.post("/api/admin/violations/purge-all", authenticateToken, (req, res) => {
 
 // Endpoint nhận log traffic từ App C# gửi qua (Tăng cường giám sát Proxy)
 app.post("/api/proxy/check", (req, res) => {
-  const { userId, url, classId, port, evidence_image } = req.body;
+  const { userId, url, classId, port, evidence_image, keyword } = req.body;
+  console.log(`[PROXY-CHECK] Incoming report from User: ${userId}, URL: ${url}, Keyword: ${keyword}, HasImage: ${!!evidence_image}`);
+
   if (!url || !userId) return res.sendStatus(400);
 
   let violationType = null;
@@ -6523,21 +6526,23 @@ app.post("/api/proxy/check", (req, res) => {
   else if (VIOLATION_KEYS.SOCIAL.some((key) => lowerUrl.includes(key))) {
     violationType = "Truy cập Mạng xã hội/Giải trí trong giờ thi";
   }
+  else {
+    // Fallback nếu App báo mà Server không khớp từ khóa cụ thể
+    violationType = keyword ? `Vi phạm từ khóa: ${keyword}` : "Vi phạm được phát hiện từ ứng dụng Edusmart";
+  }
+
+  console.log(`[PROXY-CHECK] Final Violation Type: ${violationType}`);
 
   if (violationType) {
     const reason = `[Proxy Capture Port ${port || 1111}] ${violationType}: ${url}`;
     let evidenceUrl = null;
+    let fullPath = null;
 
     if (evidence_image) {
       try {
         const fileName = `proxy_violation_${Date.now()}.jpg`;
         const relativePath = `/uploads/violations/${fileName}`;
-        const fullPath = path.join(
-          __dirname,
-          "uploads",
-          "violations",
-          fileName,
-        );
+        fullPath = path.join(__dirname, "uploads", "violations", fileName);
 
         // Ensure directory exists
         if (!fs.existsSync(path.dirname(fullPath))) {
