@@ -863,7 +863,7 @@ export default function AdminDashboard() {
         toast('Cập nhật lớp thành công!', 'success')
 
         // Đồng bộ hóa tức thì cho học sinh trong lớp
-        const roomId = `monitoring_${selectedClass.id}`;
+        const roomId = user?.school_id ? `school_${user.school_id}_class_${selectedClass.id}` : `monitoring_${selectedClass.id}`;
         socket?.emit('monitoring-sync', { roomId, type: 'ai', enabled: !!payload.study_monitoring_enabled });
         socket?.emit('monitoring-sync', { roomId, type: 'social', enabled: !!payload.social_monitoring_enabled });
         socket?.emit('monitoring-sync', { roomId, type: 'test', enabled: !!payload.test_monitoring_enabled });
@@ -1495,6 +1495,13 @@ export default function AdminDashboard() {
       setIsGlobalProctoring(enabled)
       toast(`Đã ${enabled ? 'bật' : 'tắt'} giám sát AI`, 'success')
       logAction('Giám sát', `${enabled ? 'Bật' : 'Tắt'} giám sát AI toàn hệ thống`, 'info')
+
+      // Real-time sync for global settings
+      const rooms = ['global_proctoring', 'monitoring_global'];
+      if (user?.school_id) rooms.push(`school_${user.school_id}`);
+      rooms.forEach(roomId => {
+        socket?.emit('monitoring-sync', { roomId, type: 'ai', enabled })
+      });
     } catch (error: any) {
       console.error('Error toggling proctoring:', error)
       const errorMsg = error.response?.data?.error || 'Không thể cập nhật cài đặt'
@@ -1509,6 +1516,13 @@ export default function AdminDashboard() {
       setIsGlobalSocialMonitoring(enabled)
       toast(`Đã ${enabled ? 'bật' : 'tắt'} giám sát mạng xã hội`, 'success')
       logAction('Giám sát', `${enabled ? 'Bật' : 'Tắt'} giám sát MXH toàn hệ thống`, 'info')
+
+      // Real-time sync for global settings
+      const rooms = ['global_proctoring', 'monitoring_global'];
+      if (user?.school_id) rooms.push(`school_${user.school_id}`);
+      rooms.forEach(roomId => {
+        socket?.emit('monitoring-sync', { roomId, type: 'social', enabled })
+      });
     } catch (error: any) {
       console.error('Error toggling social monitoring:', error)
       const errorMsg = error.response?.data?.error || 'Không thể cập nhật cài đặt'
@@ -1523,6 +1537,13 @@ export default function AdminDashboard() {
       setIsGlobalTestMonitoring(enabled)
       toast(`Đã ${enabled ? 'bật' : 'tắt'} giám sát kiểm tra`, 'success')
       logAction('Giám sát', `${enabled ? 'Bật' : 'Tắt'} giám sát phòng thi toàn hệ thống`, 'info')
+
+      // Real-time sync for global settings
+      const rooms = ['global_proctoring', 'monitoring_global'];
+      if (user?.school_id) rooms.push(`school_${user.school_id}`);
+      rooms.forEach(roomId => {
+        socket?.emit('monitoring-sync', { roomId, type: 'test', enabled, mode: 'strict' })
+      });
     } catch (error: any) {
       console.error('Error toggling test monitoring:', error)
       const errorMsg = error.response?.data?.error || 'Không thể cập nhật cài đặt'

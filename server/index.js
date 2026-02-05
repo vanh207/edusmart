@@ -58,6 +58,7 @@ const mainGenAI =
   (poolInstances.length > 0 ? poolInstances[0] : new GoogleGenerativeAI(process.env.GEMINI_API_KEY || ""));
 
 const app = express();
+app.set('trust proxy', 1);
 const server = http.createServer(app);
 const allowedOrigins = [
   "http://localhost:3000",
@@ -7408,24 +7409,23 @@ app.post("/api/ai/check-pronunciation", authenticateToken, async (req, res) => {
 
   try {
     const prompt = `
-      Bạn là chuyên gia ngôn ngữ học tiếng Anh. 
-      Từ mẫu: "${word}"
-      Người dùng đọc là: "${userInput}"
-      
-      Hãy so sánh cách phát âm(dựa trên text - to - speech transcript) và chấm điểm.
-      1. Chấm điểm độ chính xác(0 - 100).
-      2. Xác định đúng / sai(nếu điểm >= 80 thì là true).
-      3. Đưa ra nhận xét chi tiết bằng tiếng Việt:
-  - Nếu sai, chỉ ra phần âm nào sai(ví dụ: thiếu âm đuôi 's', đọc sai nguyên âm...).
-         - Nếu đúng, khen ngợi.
-      
-      Trả về DUY NHẤT định dạng JSON sau:
-  {
-    "score": number,
-    "correct": boolean,
-    "feedback": "Lời nhận xét"
-  }
-    `;
+        Bạn là chuyên gia ngữ âm tiếng Anh. Học sinh đang luyện phát âm từ: "${word}".
+        Dữ liệu thu âm (transcript): "${userInput}".
+        
+        Hãy phân tích và so sánh:
+        1. Chấm điểm độ chính xác (0-100) dựa trên âm tiết.
+        2. Xác định Đúng/Sai (Đúng nếu score >= 85).
+        3. Nhận xét chi tiết bằng tiếng Việt: 
+           - Nếu sai, chỉ rõ lỗi (ví dụ: "Thiếu âm đuôi /s/", "Đọc sai nguyên âm chính").
+           - Nếu đúng, khen ngợi khích lệ.
+        
+        Trả về định dạng JSON:
+        {
+          "score": number,
+          "correct": boolean,
+          "feedback": "Lời nhận xét"
+        }
+      `;
 
     let aiResponse = null;
     try {
@@ -7484,20 +7484,21 @@ app.post("/api/ai/check-writing", authenticateToken, async (req, res) => {
 
   try {
     const prompt = `
-      Bạn là giáo viên tiếng Anh.Học sinh đang luyện viết từ: "${word}".
+      Bạn là giáo viên tiếng Anh chuyên nghiệp. Học sinh đang luyện viết từ vựng: "${word}".
       Học sinh đã nhập: "${userInput.trim()}".
       
-      Hãy kiểm tra xem học sinh viết đúng chưa. 
-      - Nếu đúng, khen ngợi.
-      - Nếu sai, chỉ ra lỗi sai(chính tả, ngữ pháp) và cung cấp phiên âm IPA của từ đúng.
+      Hãy kiểm tra xem học sinh viết đúng chưa:
+      1. Nếu đúng hoàn toàn, khen ngợi ngắn gọn.
+      2. Nếu sai chính tả, hãy so sánh "${userInput.trim()}" với "${word}" và chỉ ra chính xác ký tự nào bị sai hoặc thiếu.
+      3. Cung cấp phiên âm IPA chuẩn của từ "${word}".
       
       Trả về DUY NHẤT định dạng JSON sau:
-  {
-    "correct": boolean,
-    "feedback": "Lời nhận xét ngắn gọn (tiếng Việt)",
-    "ipa": "phiên âm IPA của từ ${word}",
-    "target_word": "${word}"
-  }
+      {
+        "correct": boolean,
+        "feedback": "Lời nhận xét chi tiết (tiếng Việt)",
+        "ipa": "phiên âm IPA của từ ${word}",
+        "target_word": "${word}"
+      }
     `;
 
     // 2. AI Logic: For feedback and IPA enrichment

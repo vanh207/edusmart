@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Book, Search, ArrowLeft, Volume2, X, Sparkles, GraduationCap, ChevronRight, Mic, Flame } from 'lucide-react'
-import { vocabularyAPI, userAPI, API_URL } from '@/lib/api'
+import { vocabularyAPI, userAPI, aiAPI, pronunciationAPI, API_URL } from '@/lib/api'
 import ChatbotWidget from '@/components/ChatbotWidget'
 import FilterBar from '@/components/FilterBar'
 import StudentStatusHeader from '@/components/StudentStatusHeader'
@@ -110,20 +110,22 @@ export default function Vocabulary() {
     fetchData()
   }, [filters, router])
 
+  const [checkingAI, setCheckingAI] = useState(false);
+
   // 1. Hàm đọc từ (Text to Speech)
   const speakWord = (text: string) => {
     if ('speechSynthesis' in window) {
-      // Hủy các lần đọc trước đó để tránh dồn toa
       window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.lang = 'en-US';
+      utterance.rate = 0.9;
       window.speechSynthesis.speak(utterance);
     } else {
-      toast?.("Trình duyệt của bạn không hỗ trợ đọc văn bản.", "error");
+      toast?.("Trình duyệt không hỗ trợ đọc văn bản.", "error");
     }
   }
 
-  // 2. Hàm xử lý thu âm (Web Speech API)
+  // 2. Hàm xử lý thu âm (Web Speech API) & AI Check
   const startListening = async () => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
@@ -133,64 +135,98 @@ export default function Vocabulary() {
     }
 
     try {
-      // Yêu cầu quyền truy cập Micro của hệ thống một cách tường minh
-      console.log("🎤 Requesting microphone permission...");
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      // Sau khi được cấp quyền, ta có thể dừng stream này ngay để SpeechRecognition tự quản lý
       stream.getTracks().forEach(track => track.stop());
     } catch (err) {
-      console.error("Mic permission denied:", err);
-      toast?.("Vui lòng cho phép trình duyệt truy cập Micro để sử dụng tính năng này.", "error");
+      toast?.("Vui lòng cho phép Micro để luyện nói.", "error");
       return;
     }
 
     setIsListening(true);
     const recognition = new SpeechRecognition();
     recognition.lang = 'en-US';
-    recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
-
     recognition.start();
 
-    recognition.onresult = (event: any) => {
+    recognition.onresult = async (event: any) => {
       const speechResult = event.results[0][0].transcript;
-      const confidence = event.results[0][0].confidence;
+      setIsListening(false);
+      setCheckingAI(true);
 
-      const isMatch = speechResult.toLowerCase().includes(selectedWord?.word.toLowerCase() || '');
-      const score = Math.round(confidence * 100);
+      try {
+        // Gửi tới AI để phân tích thực sự
+        const response = await pronunciationAPI.checkPronunciation(selectedWord?.word || '', speechResult);
+        const data = response.data;
 
-      setPronunciationResult({
-        text: speechResult,
-        score: isMatch ? (score < 80 ? 85 : score) : score,
-        match: isMatch,
-        feedback: isMatch ? "Phát âm rất tốt! Bạn đã nói đúng từ này." : "Hãy thử lại, chú ý cách phát âm các âm tiết nhé."
+        setPronunciationResult({
+          text: speechResult,
+          score: data.score,
+          match: data.correct,
+          feedback: data.feedback
+        });
+
+        // Ghi lại tiến trình nếu làm tốt
+        if (data.correct && selectedWord) {
+          vocabularyAPI.recordProgress({
+            vocabulary_id: Number(selectedWord.id),
+            type: 'speaking',
+            score: data.score
+          }).catch(() => { });
+        }
+      } catch (err) {
+        // Fallback đơn giản nếu AI lỗi
+        const isMatch = speechResult.toLowerCase().includes(selectedWord?.word.toLowerCase() || '');
+        setPronunciationResult({
+          text: speechResult,
+          score: isMatch ? 90 : 40,
+          match: isMatch,
+          feedback: isMatch ? "Phát âm ổn! (Chế độ offline)" : "Thử lại nhé! (Chế độ offline)"
+        });
+      } finally {
+        setCheckingAI(false);
+      }
+    };
+
+    recognition.onerror = () => {
+      setIsListening(false);
+      toast?.("Lỗi nhận diện giọng nói.", "error");
+    };
+  };
+
+  // 3. Hàm kiểm tra bài viết (Writing) - AI Powered
+  const handleCheckWriting = async () => {
+    if (!selectedWord || !writingInput.trim()) return;
+
+    setCheckingAI(true);
+    try {
+      const response = await aiAPI.checkWriting(selectedWord.word, writingInput);
+      const data = response.data;
+
+      setWritingResult({
+        correct: data.correct,
+        feedback: data.feedback
       });
-      setIsListening(false);
-    };
 
-    recognition.onerror = (event: any) => {
-      console.error(event.error);
-      setIsListening(false);
-      toast?.("Không thể nhận diện giọng nói. Hãy kiểm tra Micro của bạn.", "error");
-    };
+      // Nếu có IPA từ AI thì cập nhật hiển thị
+      if (data.ipa && selectedWord) {
+        setSelectedWord({ ...selectedWord, pronunciation: data.ipa });
+      }
 
-    recognition.onend = () => {
-      setIsListening(false);
-    };
-  }
-
-  // 3. Hàm kiểm tra bài viết (Writing)
-  const handleCheckWriting = () => {
-    if (!selectedWord) return;
-
-    const isCorrect = writingInput.trim().toLowerCase() === selectedWord.word.toLowerCase();
-
-    setWritingResult({
-      correct: isCorrect,
-      feedback: isCorrect
-        ? "Xuất sắc! Bạn đã nhớ chính xác từ vựng."
-        : `Rất tiếc, từ đúng phải là "${selectedWord.word}". Hãy thử lại nhé!`
-    });
+      if (data.correct) {
+        vocabularyAPI.recordProgress({
+          vocabulary_id: Number(selectedWord.id),
+          type: 'writing',
+          score: 100
+        }).catch(() => { });
+      }
+    } catch (err) {
+      const isCorrect = writingInput.trim().toLowerCase() === selectedWord.word.toLowerCase();
+      setWritingResult({
+        correct: isCorrect,
+        feedback: isCorrect ? "Chính xác! (Offline)" : `Sai rồi, từ đúng là "${selectedWord.word}"`
+      });
+    } finally {
+      setCheckingAI(false);
+    }
   }
 
   return (
@@ -436,10 +472,15 @@ export default function Vocabulary() {
                       {!writingResult ? (
                         <button
                           onClick={handleCheckWriting}
-                          disabled={!writingInput.trim() || loading}
-                          className="w-full py-4 bg-purple-600 text-white rounded-2xl font-black text-lg hover:bg-purple-700 transition-all shadow-lg shadow-purple-500/20 active:scale-95 disabled:opacity-50 disabled:active:scale-100"
+                          disabled={!writingInput.trim() || checkingAI}
+                          className="w-full py-4 bg-purple-600 text-white rounded-2xl font-black text-lg hover:bg-purple-700 transition-all shadow-lg shadow-purple-500/20 active:scale-95 disabled:opacity-50 disabled:active:scale-100 flex items-center justify-center gap-2"
                         >
-                          {loading ? 'Đang kiểm tra...' : 'KIỂM TRA'}
+                          {checkingAI ? (
+                            <>
+                              <LoadingSpinner size="sm" text="" noContainer />
+                              <span>Đang kiểm tra...</span>
+                            </>
+                          ) : 'KIỂM TRA'}
                         </button>
                       ) : (
                         <button
@@ -503,16 +544,21 @@ export default function Vocabulary() {
                       <div className="space-y-8">
                         <button
                           onClick={startListening}
-                          disabled={isListening}
+                          disabled={isListening || checkingAI}
                           className={`w-full py-6 rounded-3xl font-black text-xl flex items-center justify-center gap-4 transition-all shadow-xl ${isListening
                             ? 'bg-rose-500 text-white animate-pulse'
-                            : 'bg-slate-900 text-white hover:bg-slate-800 shadow-slate-900/20 active:scale-95'
+                            : checkingAI ? 'bg-amber-500 text-white animate-pulse' : 'bg-slate-900 text-white hover:bg-slate-800 shadow-slate-900/20 active:scale-95'
                             }`}
                         >
                           {isListening ? (
                             <>
                               <Mic className="w-8 h-8 animate-bounce" />
                               <span>Đang lắng nghe...</span>
+                            </>
+                          ) : checkingAI ? (
+                            <>
+                              <LoadingSpinner size="sm" text="" noContainer />
+                              <span>Đang phân tích cách nói...</span>
                             </>
                           ) : (
                             <>
