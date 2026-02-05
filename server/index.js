@@ -364,7 +364,12 @@ function addColumnIfNotExists(table, column, definition, callback) {
         `ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`,
         (err) => {
           if (err) {
-            console.error(`Error adding column ${column} to ${table}:`, err);
+            if (err.message.includes("duplicate column name")) {
+              // Ignore if column already exists (handles race conditions)
+              console.log(`Column ${column} already exists in ${table} (skipped).`);
+            } else {
+              console.error(`Error adding column ${column} to ${table}:`, err);
+            }
           } else {
             console.log(`Column ${column} added to ${table} successfully.`);
           }
