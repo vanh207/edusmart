@@ -106,7 +106,7 @@ export default function PracticeDetail() {
       } else {
         // Try to load lesson data for proctoring settings, but don't fail if it's missing
         try {
-          const lessonRes = exercises[0]?.lesson_id ? await api.get(`/lessons/${exercises[0].lesson_id}`) : null
+          const lessonRes = data[0]?.lesson_id ? await api.get(`/lessons/${data[0].lesson_id}`) : null
           if (lessonRes && lessonRes.data && lessonRes.data.ai_proctoring) {
             setIsProctoring(true)
           }
@@ -320,256 +320,258 @@ export default function PracticeDetail() {
     )
   }
 
-  <ProctoringGuard
-    classId={user?.current_class_id || null}
-    type="study"
-  >
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-gray-50 to-blue-50">
-      <nav className="bg-white/80 backdrop-blur-md shadow-sm border-b border-gray-200 sticky top-0 z-50">
-        <div className="container mx-auto px-4 h-20 flex justify-between items-center">
-          <Link href="/practice" className="text-blue-600 hover:text-blue-800 flex items-center gap-2 font-bold p-3 hover:bg-blue-50 rounded-2xl transition-all">
-            <ChevronLeft className="w-5 h-5" />
-            Thoát luyện tập
-          </Link>
-          <div className="flex items-center gap-4">
-            {isProctoring && (
-              null
-            )}
-            <div className={`flex items-center gap-2 px-4 py-2 rounded-2xl border shadow-sm ${timeLeft < 60 ? 'bg-red-50 border-red-200 text-red-600 animate-pulse' : 'bg-blue-600 border-blue-700 text-white'}`}>
-              <Timer className="w-5 h-5" />
-              <span className="font-black tabular-nums">{formatTime(timeLeft)}</span>
+  return (
+    <ProctoringGuard
+      classId={user?.current_class_id || null}
+      type="study"
+    >
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-gray-50 to-blue-50">
+        <nav className="bg-white/80 backdrop-blur-md shadow-sm border-b border-gray-200 sticky top-0 z-50">
+          <div className="container mx-auto px-4 h-20 flex justify-between items-center">
+            <Link href="/practice" className="text-blue-600 hover:text-blue-800 flex items-center gap-2 font-bold p-3 hover:bg-blue-50 rounded-2xl transition-all">
+              <ChevronLeft className="w-5 h-5" />
+              Thoát luyện tập
+            </Link>
+            <div className="flex items-center gap-4">
+              {isProctoring && (
+                null
+              )}
+              <div className={`flex items-center gap-2 px-4 py-2 rounded-2xl border shadow-sm ${timeLeft < 60 ? 'bg-red-50 border-red-200 text-red-600 animate-pulse' : 'bg-blue-600 border-blue-700 text-white'}`}>
+                <Timer className="w-5 h-5" />
+                <span className="font-black tabular-nums">{formatTime(timeLeft)}</span>
+              </div>
             </div>
           </div>
-        </div>
-      </nav>
+        </nav>
 
-      <div className="container mx-auto px-4 py-8">
-        {submitted ? (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="max-w-3xl mx-auto bg-white rounded-[3rem] border border-slate-100 shadow-2xl overflow-hidden"
-          >
-            <div className="bg-gradient-to-br from-blue-600 to-indigo-800 p-12 text-center text-white relative overflow-hidden">
-              <div className="absolute top-0 left-0 w-full h-full opacity-10 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-white via-transparent to-transparent"></div>
-              <div className="relative z-10">
-                <div className="w-24 h-24 bg-white/20 backdrop-blur-xl rounded-[2.5rem] flex items-center justify-center mx-auto mb-6 border border-white/30 shadow-2xl">
-                  <Trophy className="w-12 h-12 text-white" />
-                </div>
-                <h2 className="text-4xl font-black mb-2 tracking-tight">Tuyệt vời! 🔥</h2>
-                <p className="text-blue-100 font-bold mb-10 text-lg">Bạn đã chinh phục bộ câu hỏi luyện tập.</p>
+        <div className="container mx-auto px-4 py-8">
+          {submitted ? (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="max-w-3xl mx-auto bg-white rounded-[3rem] border border-slate-100 shadow-2xl overflow-hidden"
+            >
+              <div className="bg-gradient-to-br from-blue-600 to-indigo-800 p-12 text-center text-white relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-full h-full opacity-10 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-white via-transparent to-transparent"></div>
+                <div className="relative z-10">
+                  <div className="w-24 h-24 bg-white/20 backdrop-blur-xl rounded-[2.5rem] flex items-center justify-center mx-auto mb-6 border border-white/30 shadow-2xl">
+                    <Trophy className="w-12 h-12 text-white" />
+                  </div>
+                  <h2 className="text-4xl font-black mb-2 tracking-tight">Tuyệt vời! 🔥</h2>
+                  <p className="text-blue-100 font-bold mb-10 text-lg">Bạn đã chinh phục bộ câu hỏi luyện tập.</p>
 
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
-                  <div className="bg-white/10 backdrop-blur-md rounded-3xl p-6 border border-white/20">
-                    <p className="text-[10px] font-black text-blue-200 uppercase tracking-widest mb-2">Điểm số</p>
-                    <p className="text-4xl font-black">{result?.score || 0}</p>
-                  </div>
-                  <div className="bg-white/10 backdrop-blur-md rounded-3xl p-6 border border-white/20">
-                    <p className="text-[10px] font-black text-blue-200 uppercase tracking-widest mb-2">Hoàn thành</p>
-                    <p className="text-4xl font-black">{result?.percentage?.toFixed(0)}%</p>
-                  </div>
-                  <div className="bg-white/10 backdrop-blur-md rounded-3xl p-6 border border-white/20 md:block hidden">
-                    <p className="text-[10px] font-black text-blue-200 uppercase tracking-widest mb-2">XP</p>
-                    <p className="text-4xl font-black text-amber-300">+{result?.score * 10}</p>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+                    <div className="bg-white/10 backdrop-blur-md rounded-3xl p-6 border border-white/20">
+                      <p className="text-[10px] font-black text-blue-200 uppercase tracking-widest mb-2">Điểm số</p>
+                      <p className="text-4xl font-black">{result?.score || 0}</p>
+                    </div>
+                    <div className="bg-white/10 backdrop-blur-md rounded-3xl p-6 border border-white/20">
+                      <p className="text-[10px] font-black text-blue-200 uppercase tracking-widest mb-2">Hoàn thành</p>
+                      <p className="text-4xl font-black">{result?.percentage?.toFixed(0)}%</p>
+                    </div>
+                    <div className="bg-white/10 backdrop-blur-md rounded-3xl p-6 border border-white/20 md:block hidden">
+                      <p className="text-[10px] font-black text-blue-200 uppercase tracking-widest mb-2">XP</p>
+                      <p className="text-4xl font-black text-amber-300">+{result?.score * 10}</p>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
 
-            <div className="p-12 space-y-8">
-              <h3 className="text-xl font-black text-slate-800 flex items-center gap-3">
-                <Target className="w-6 h-6 text-blue-600" />
-                Chi tiết bài đã nộp
-              </h3>
-              <div className="space-y-6">
-                {(result?.results || []).map((res: any, idx: number) => {
-                  const isEssay = res.type === 'essay'
-                  return (
-                    <div key={idx} className={`p-8 rounded-[2rem] border-2 transition-all ${isEssay ? 'border-purple-100 bg-purple-50/50' : res.isCorrect ? 'border-emerald-100 bg-emerald-50/50' : 'border-red-100 bg-red-50/50'}`}>
-                      <div className="flex justify-between items-start mb-6">
-                        <h4 className="font-black text-slate-800 text-lg leading-tight flex-1 pr-6">
-                          Câu {idx + 1}: {res.question}
-                        </h4>
-                        <div className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest shadow-sm ${isEssay ? 'bg-purple-500 text-white' : res.isCorrect ? 'bg-emerald-500 text-white' : 'bg-red-500 text-white'}`}>
-                          {isEssay ? 'Đã ghi nhận' : res.isCorrect ? 'Chính xác' : 'Chưa đúng'}
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm font-bold">
-                        <div className="p-5 bg-white rounded-2xl border border-slate-100 shadow-sm">
-                          <p className="text-[10px] text-slate-400 uppercase tracking-widest mb-2 font-black">Lựa chọn của bạn</p>
-                          <p className={`text-lg font-black whitespace-pre-wrap ${isEssay ? 'text-slate-700' : res.isCorrect ? 'text-emerald-600' : 'text-red-600'}`}>{res.userAnswer || '(Bỏ trống)'}</p>
-                        </div>
-                        {!isEssay && !res.isCorrect && (
-                          <div className="p-5 bg-emerald-50 rounded-2xl border border-emerald-100 shadow-sm">
-                            <p className="text-[10px] text-emerald-400 uppercase tracking-widest mb-2 font-black">Đáp án chính xác</p>
-                            <p className="text-lg font-black text-emerald-600">{res.correctAnswer}</p>
+              <div className="p-12 space-y-8">
+                <h3 className="text-xl font-black text-slate-800 flex items-center gap-3">
+                  <Target className="w-6 h-6 text-blue-600" />
+                  Chi tiết bài đã nộp
+                </h3>
+                <div className="space-y-6">
+                  {(result?.results || []).map((res: any, idx: number) => {
+                    const isEssay = res.type === 'essay'
+                    return (
+                      <div key={idx} className={`p-8 rounded-[2rem] border-2 transition-all ${isEssay ? 'border-purple-100 bg-purple-50/50' : res.isCorrect ? 'border-emerald-100 bg-emerald-50/50' : 'border-red-100 bg-red-50/50'}`}>
+                        <div className="flex justify-between items-start mb-6">
+                          <h4 className="font-black text-slate-800 text-lg leading-tight flex-1 pr-6">
+                            Câu {idx + 1}: {res.question}
+                          </h4>
+                          <div className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest shadow-sm ${isEssay ? 'bg-purple-500 text-white' : res.isCorrect ? 'bg-emerald-500 text-white' : 'bg-red-500 text-white'}`}>
+                            {isEssay ? 'Đã ghi nhận' : res.isCorrect ? 'Chính xác' : 'Chưa đúng'}
                           </div>
-                        )}
-                        {isEssay && (
-                          <div className="p-5 bg-blue-50 rounded-2xl border border-blue-100 shadow-sm flex items-center gap-3">
-                            <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white flex-shrink-0">
-                              <Target className="w-5 h-5" />
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm font-bold">
+                          <div className="p-5 bg-white rounded-2xl border border-slate-100 shadow-sm">
+                            <p className="text-[10px] text-slate-400 uppercase tracking-widest mb-2 font-black">Lựa chọn của bạn</p>
+                            <p className={`text-lg font-black whitespace-pre-wrap ${isEssay ? 'text-slate-700' : res.isCorrect ? 'text-emerald-600' : 'text-red-600'}`}>{res.userAnswer || '(Bỏ trống)'}</p>
+                          </div>
+                          {!isEssay && !res.isCorrect && (
+                            <div className="p-5 bg-emerald-50 rounded-2xl border border-emerald-100 shadow-sm">
+                              <p className="text-[10px] text-emerald-400 uppercase tracking-widest mb-2 font-black">Đáp án chính xác</p>
+                              <p className="text-lg font-black text-emerald-600">{res.correctAnswer}</p>
                             </div>
-                            <p className="text-xs text-blue-700 font-bold leading-tight">Bài làm của bạn đã được lưu lại. Giáo viên sẽ sớm xem xét và chấm điểm cho bạn!</p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-
-              <div className="pt-12 flex flex-col md:flex-row gap-4">
-                <button
-                  onClick={resetQuiz}
-                  className="flex-1 py-6 bg-slate-100 text-slate-600 font-black rounded-3xl hover:bg-slate-200 transition-all flex items-center justify-center gap-3 uppercase tracking-widest"
-                >
-                  <RotateCcw className="w-6 h-6" /> Thử lại
-                </button>
-                <Link
-                  href="/practice"
-                  className="flex-[2] py-6 bg-blue-600 text-white font-black rounded-3xl hover:bg-blue-700 shadow-2xl shadow-blue-500/30 transition-all text-center flex items-center justify-center gap-3 uppercase tracking-widest"
-                >
-                  Quay lại khóa học <Target className="w-6 h-6" />
-                </Link>
-              </div>
-            </div>
-          </motion.div>
-        ) : (
-          <div className="max-w-3xl mx-auto pb-20">
-            <div className="bg-white rounded-[3rem] shadow-xl p-10 md:p-14 border border-white">
-              <h2 className="text-3xl font-black text-slate-900 mb-10 pb-6 border-b border-slate-50">{firstEx.set_title}</h2>
-
-              <div className="space-y-12">
-                {exercises.map((ex, idx) => (
-                  <div key={ex.id} className="pb-12 last:pb-0 border-b last:border-0 border-slate-50">
-                    <div className="flex items-start gap-5 mb-8">
-                      <div className="w-10 h-10 bg-slate-900 text-white rounded-xl flex items-center justify-center font-black flex-shrink-0 mt-1 shadow-lg">
-                        {idx + 1}
-                      </div>
-                      <h3 className="text-xl font-bold text-slate-800 leading-relaxed">
-                        {ex.question}
-                      </h3>
-                    </div>
-
-                    {ex.audio_url && (
-                      <div className="mb-6 pl-14">
-                        <div className="bg-blue-50/50 p-4 rounded-2xl border border-blue-100/50 flex items-center gap-4">
-                          <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-blue-500/20">
-                            <Headphones className="w-5 h-5" />
-                          </div>
-                          <audio
-                            src={`${API_URL}${ex.audio_url}`}
-                            controls
-                            className="flex-1 h-10 custom-audio-player"
-                          />
-                        </div>
-                      </div>
-                    )}
-
-                    {ex.type === 'essay' ? (
-                      <div className="space-y-6 pl-14">
-                        <textarea
-                          placeholder="Viết nội dung câu trả lời của bạn..."
-                          rows={6}
-                          className="w-full p-6 bg-slate-50 border-2 border-slate-100 rounded-[2rem] outline-none focus:border-blue-500 focus:bg-white transition-all font-medium text-lg"
-                          value={answers[ex.id] || ''}
-                          onChange={(e) => setAnswers({ ...answers, [ex.id]: e.target.value })}
-                        />
-                        <div className="flex items-center gap-4">
-                          <label className={`flex-1 flex items-center justify-center gap-3 p-6 border-2 border-dashed rounded-[2rem] cursor-pointer transition-all ${selectedFiles[ex.id] ? 'bg-blue-50 border-blue-500 text-blue-600' : 'bg-slate-50 border-slate-200 text-slate-400 hover:bg-blue-50'}`}>
-                            <FileUp className="w-6 h-6" />
-                            <span className="font-bold">{selectedFiles[ex.id] ? (selectedFiles[ex.id] as any).name : 'Tải lên hình ảnh / tài liệu (Tùy chọn)'}</span>
-                            <input type="file" className="hidden" onChange={(e) => handleFileChange(ex.id, e.target.files ? e.target.files[0] : null)} />
-                          </label>
-                          {selectedFiles[ex.id] && (
-                            <button onClick={() => handleFileChange(ex.id, null)} className="p-6 bg-red-50 text-red-500 rounded-[2rem] hover:bg-red-100 transition-all">
-                              <X className="w-6 h-6" />
-                            </button>
+                          )}
+                          {isEssay && (
+                            <div className="p-5 bg-blue-50 rounded-2xl border border-blue-100 shadow-sm flex items-center gap-3">
+                              <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white flex-shrink-0">
+                                <Target className="w-5 h-5" />
+                              </div>
+                              <p className="text-xs text-blue-700 font-bold leading-tight">Bài làm của bạn đã được lưu lại. Giáo viên sẽ sớm xem xét và chấm điểm cho bạn!</p>
+                            </div>
                           )}
                         </div>
                       </div>
-                    ) : (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pl-14">
-                        {(Array.isArray(ex.options) ? ex.options : JSON.parse(ex.options || '[]')).map((opt: string, optIdx: number) => {
-                          const letter = String.fromCharCode(65 + optIdx)
-                          const isSelected = answers[ex.id] === letter
-                          return (
-                            <button
-                              key={optIdx}
-                              onClick={() => handleAnswerSelect(ex.id, letter)}
-                              className={`p-6 text-left rounded-[1.75rem] border-2 transition-all group flex items-start gap-4 ${isSelected ? 'bg-blue-600 border-blue-600 shadow-xl shadow-blue-500/20' : 'bg-white border-slate-100 hover:border-blue-200'}`}
-                            >
-                              <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-xs border-2 ${isSelected ? 'bg-white/20 border-white/30 text-white' : 'bg-slate-50 border-slate-100 text-slate-400'}`}>
-                                {letter}
-                              </div>
-                              <span className={`font-bold mt-1 ${isSelected ? 'text-white' : 'text-slate-700'}`}>{opt}</span>
-                            </button>
-                          )
-                        })}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
+                    )
+                  })}
+                </div>
 
-              <div className="mt-16 pt-10 border-t border-slate-50">
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => setShowConfirmSubmit(true)}
-                  className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-6 rounded-3xl font-black text-xl shadow-2xl shadow-blue-500/40 uppercase tracking-[0.2em]"
-                >
-                  Hoàn thành bài luyện tập
-                </motion.button>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      <AnimatePresence>
-        {showConfirmSubmit && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[100] flex items-center justify-center p-4"
-          >
-            <motion.div
-              initial={{ scale: 0.9, y: 20 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.9, y: 20 }}
-              className="bg-white rounded-[3rem] p-12 max-w-sm w-full shadow-2xl text-center border-4 border-white/20"
-            >
-              <div className="w-20 h-20 bg-blue-100 rounded-[2rem] flex items-center justify-center mx-auto mb-8 text-blue-600">
-                <Target className="w-10 h-10" />
-              </div>
-              <h3 className="text-3xl font-black text-slate-800 mb-4 leading-tight">Nộp bài ngay?</h3>
-              <p className="text-slate-400 font-bold mb-10 italic">Hãy chắc chắn rằng bạn đã kiểm tra kỹ các câu trả lời của mình!</p>
-              <div className="flex gap-4">
-                <button
-                  onClick={() => setShowConfirmSubmit(false)}
-                  className="flex-1 py-4 bg-slate-50 text-slate-400 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-slate-100 transition-all"
-                >
-                  Hủy
-                </button>
-                <button
-                  onClick={() => {
-                    setShowConfirmSubmit(false)
-                    handleSubmit()
-                  }}
-                  className="flex-1 py-4 bg-blue-600 text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-lg shadow-blue-500/20 hover:bg-blue-700 transition-all"
-                >
-                  Nộp bài
-                </button>
+                <div className="pt-12 flex flex-col md:flex-row gap-4">
+                  <button
+                    onClick={resetQuiz}
+                    className="flex-1 py-6 bg-slate-100 text-slate-600 font-black rounded-3xl hover:bg-slate-200 transition-all flex items-center justify-center gap-3 uppercase tracking-widest"
+                  >
+                    <RotateCcw className="w-6 h-6" /> Thử lại
+                  </button>
+                  <Link
+                    href="/practice"
+                    className="flex-[2] py-6 bg-blue-600 text-white font-black rounded-3xl hover:bg-blue-700 shadow-2xl shadow-blue-500/30 transition-all text-center flex items-center justify-center gap-3 uppercase tracking-widest"
+                  >
+                    Quay lại khóa học <Target className="w-6 h-6" />
+                  </Link>
+                </div>
               </div>
             </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          ) : (
+            <div className="max-w-3xl mx-auto pb-20">
+              <div className="bg-white rounded-[3rem] shadow-xl p-10 md:p-14 border border-white">
+                <h2 className="text-3xl font-black text-slate-900 mb-10 pb-6 border-b border-slate-50">{firstEx.set_title}</h2>
 
-    </div>
-  </ProctoringGuard>
+                <div className="space-y-12">
+                  {exercises.map((ex, idx) => (
+                    <div key={ex.id} className="pb-12 last:pb-0 border-b last:border-0 border-slate-50">
+                      <div className="flex items-start gap-5 mb-8">
+                        <div className="w-10 h-10 bg-slate-900 text-white rounded-xl flex items-center justify-center font-black flex-shrink-0 mt-1 shadow-lg">
+                          {idx + 1}
+                        </div>
+                        <h3 className="text-xl font-bold text-slate-800 leading-relaxed">
+                          {ex.question}
+                        </h3>
+                      </div>
+
+                      {ex.audio_url && (
+                        <div className="mb-6 pl-14">
+                          <div className="bg-blue-50/50 p-4 rounded-2xl border border-blue-100/50 flex items-center gap-4">
+                            <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-blue-500/20">
+                              <Headphones className="w-5 h-5" />
+                            </div>
+                            <audio
+                              src={`${API_URL}${ex.audio_url}`}
+                              controls
+                              className="flex-1 h-10 custom-audio-player"
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {ex.type === 'essay' ? (
+                        <div className="space-y-6 pl-14">
+                          <textarea
+                            placeholder="Viết nội dung câu trả lời của bạn..."
+                            rows={6}
+                            className="w-full p-6 bg-slate-50 border-2 border-slate-100 rounded-[2rem] outline-none focus:border-blue-500 focus:bg-white transition-all font-medium text-lg"
+                            value={answers[ex.id] || ''}
+                            onChange={(e) => setAnswers({ ...answers, [ex.id]: e.target.value })}
+                          />
+                          <div className="flex items-center gap-4">
+                            <label className={`flex-1 flex items-center justify-center gap-3 p-6 border-2 border-dashed rounded-[2rem] cursor-pointer transition-all ${selectedFiles[ex.id] ? 'bg-blue-50 border-blue-500 text-blue-600' : 'bg-slate-50 border-slate-200 text-slate-400 hover:bg-blue-50'}`}>
+                              <FileUp className="w-6 h-6" />
+                              <span className="font-bold">{selectedFiles[ex.id] ? (selectedFiles[ex.id] as any).name : 'Tải lên hình ảnh / tài liệu (Tùy chọn)'}</span>
+                              <input type="file" className="hidden" onChange={(e) => handleFileChange(ex.id, e.target.files ? e.target.files[0] : null)} />
+                            </label>
+                            {selectedFiles[ex.id] && (
+                              <button onClick={() => handleFileChange(ex.id, null)} className="p-6 bg-red-50 text-red-500 rounded-[2rem] hover:bg-red-100 transition-all">
+                                <X className="w-6 h-6" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pl-14">
+                          {(Array.isArray(ex.options) ? ex.options : JSON.parse(ex.options || '[]')).map((opt: string, optIdx: number) => {
+                            const letter = String.fromCharCode(65 + optIdx)
+                            const isSelected = answers[ex.id] === letter
+                            return (
+                              <button
+                                key={optIdx}
+                                onClick={() => handleAnswerSelect(ex.id, letter)}
+                                className={`p-6 text-left rounded-[1.75rem] border-2 transition-all group flex items-start gap-4 ${isSelected ? 'bg-blue-600 border-blue-600 shadow-xl shadow-blue-500/20' : 'bg-white border-slate-100 hover:border-blue-200'}`}
+                              >
+                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-xs border-2 ${isSelected ? 'bg-white/20 border-white/30 text-white' : 'bg-slate-50 border-slate-100 text-slate-400'}`}>
+                                  {letter}
+                                </div>
+                                <span className={`font-bold mt-1 ${isSelected ? 'text-white' : 'text-slate-700'}`}>{opt}</span>
+                              </button>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-16 pt-10 border-t border-slate-50">
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => setShowConfirmSubmit(true)}
+                    className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-6 rounded-3xl font-black text-xl shadow-2xl shadow-blue-500/40 uppercase tracking-[0.2em]"
+                  >
+                    Hoàn thành bài luyện tập
+                  </motion.button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <AnimatePresence>
+          {showConfirmSubmit && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[100] flex items-center justify-center p-4"
+            >
+              <motion.div
+                initial={{ scale: 0.9, y: 20 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0.9, y: 20 }}
+                className="bg-white rounded-[3rem] p-12 max-w-sm w-full shadow-2xl text-center border-4 border-white/20"
+              >
+                <div className="w-20 h-20 bg-blue-100 rounded-[2rem] flex items-center justify-center mx-auto mb-8 text-blue-600">
+                  <Target className="w-10 h-10" />
+                </div>
+                <h3 className="text-3xl font-black text-slate-800 mb-4 leading-tight">Nộp bài ngay?</h3>
+                <p className="text-slate-400 font-bold mb-10 italic">Hãy chắc chắn rằng bạn đã kiểm tra kỹ các câu trả lời của mình!</p>
+                <div className="flex gap-4">
+                  <button
+                    onClick={() => setShowConfirmSubmit(false)}
+                    className="flex-1 py-4 bg-slate-50 text-slate-400 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-slate-100 transition-all"
+                  >
+                    Hủy
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowConfirmSubmit(false)
+                      handleSubmit()
+                    }}
+                    className="flex-1 py-4 bg-blue-600 text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-lg shadow-blue-500/20 hover:bg-blue-700 transition-all"
+                  >
+                    Nộp bài
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+      </div>
+    </ProctoringGuard>
+  )
 }

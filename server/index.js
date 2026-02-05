@@ -47,13 +47,15 @@ Object.keys(aiConfigs).forEach((feature) => {
   }
 });
 
+// KEY POOL for fallback support
+const keyPool = Object.values(aiConfigs).filter(Boolean);
+const poolInstances = keyPool.map(key => new GoogleGenerativeAI(key));
+
 // Fallback for one-off/legacy initialization
 const mainGenAI =
   aiInstances.chat ||
   aiInstances.content ||
-  new GoogleGenerativeAI(
-    process.env.GEMINI_API_KEY || "",
-  );
+  (poolInstances.length > 0 ? poolInstances[0] : new GoogleGenerativeAI(process.env.GEMINI_API_KEY || ""));
 
 const app = express();
 const server = http.createServer(app);
@@ -281,62 +283,59 @@ app.get("/api", (req, res) => {
 
 // (Old initialization check removed in favor of standardized one above)
 
-// Optimized AI Generation Helper with Feature-based Key Mapping
+// Optimized AI Generation Helper with Feature-based Key Mapping and Robust Fallback
 async function generateWithAI(prompt, imagePart = null, feature = "content") {
   const modelsToTry = [
     "models/gemini-2.0-flash",
+    "models/gemini-flash-latest",
     "models/gemini-1.5-flash",
-    "models/gemini-1.5-flash-8b",
     "models/gemini-pro-latest",
   ];
 
-  // Select the appropriate AI instance based on feature
-  const genAI = aiInstances[feature] || mainGenAI;
+  // Logic: Try specialized instance first, then try the entire key pool if specialized fails
+  const primaryAI = aiInstances[feature] || mainGenAI;
+  const allAIs = [primaryAI, ...poolInstances.filter(inst => inst.apiKey !== primaryAI.apiKey)];
 
   let lastQuotaError = null;
 
-  for (const modelName of modelsToTry) {
-    try {
-      console.log(
-        `[AI-${feature.toUpperCase()}] Trying Model: ${modelName}...`,
-      );
-      const model = genAI.getGenerativeModel({ model: modelName });
+  for (const genAI of allAIs) {
+    for (const modelName of modelsToTry) {
+      try {
+        const logMsg = `[AI-${feature.toUpperCase()}] Requesting ${modelName} with key ${genAI.apiKey.substring(0, 10)}...`;
+        console.log(logMsg);
+        fs.appendFileSync('ai-diagnostic.log', `[${new Date().toISOString()}] ${logMsg}\n`);
 
-      const payload = imagePart ? [prompt, imagePart] : [prompt];
-      const result = await model.generateContent(payload);
+        const model = genAI.getGenerativeModel({ model: modelName });
+        const payload = imagePart ? [prompt, imagePart] : [prompt];
 
-      console.log(
-        `[AI-${feature.toUpperCase()}] Sent request to ${modelName}, waiting for response...`,
-      );
-      const response = await result.response;
-      const text = response.text();
-      console.log(
-        `[AI-${feature.toUpperCase()}] Response received from ${modelName}. Length: ${text?.length || 0}`,
-      );
+        const result = await model.generateContent(payload);
+        const response = await result.response;
+        const text = response.text();
 
-      if (text) {
-        console.log(`[AI-${feature.toUpperCase()}] Success with ${modelName}`);
-        return text;
+        if (text) {
+          const successMsg = `[AI-${feature.toUpperCase()}] Success with ${modelName}`;
+          console.log(successMsg);
+          fs.appendFileSync('ai-diagnostic.log', `[${new Date().toISOString()}] ${successMsg}\n`);
+          return text;
+        }
+      } catch (error) {
+        const errorMsg = error.message || "";
+        const failMsg = `[AI-${feature.toUpperCase()}] ${modelName} failed: ${errorMsg.substring(0, 100)}`;
+        console.error(failMsg);
+        fs.appendFileSync('ai-diagnostic.log', `[${new Date().toISOString()}] ${failMsg}\n`);
+
+        if (errorMsg.includes("429") || errorMsg.includes("quota") || errorMsg.includes("limit")) {
+          lastQuotaError = `Hệ thống AI (${feature}) đang tạm thời quá tải. Vui lòng thử lại sau giây lát.`;
+        }
+        // If it's not a quota error (e.g., 404 or Invalid Key), we might want to try the next model/key
+        continue;
       }
-    } catch (error) {
-      const errorMsg = error.message || "";
-      console.error(
-        `[AI-${feature.toUpperCase()}] Model ${modelName} failed: ${errorMsg}`,
-      );
-
-      if (
-        errorMsg.includes("429") ||
-        errorMsg.includes("quota") ||
-        errorMsg.includes("limit")
-      ) {
-        lastQuotaError = `Google AI (${feature}) đang quá tải lượt truy cập. Vui lòng thử lại sau giây lát.`;
-      }
-      continue;
     }
   }
+
   throw new Error(
     lastQuotaError ||
-    `Tất cả các mô hình AI cho tính năng ${feature} hiện đang bận. Vui lòng thử lại sau.`,
+    `Tất cả các mô hình AI cho tính năng ${feature} hiện đang bận hoặc gặp lỗi cấu hình. Vui lòng thử lại sau.`
   );
 }
 
@@ -851,6 +850,9 @@ db.serialize(() => {
   addColumnIfNotExists("users", "ward", "TEXT");
   addColumnIfNotExists("users", "school_level", "TEXT");
   addColumnIfNotExists("users", "ip_address", "TEXT");
+  addColumnIfNotExists("users", "participation_status", "TEXT");
+  addColumnIfNotExists("users", "os_info", "TEXT");
+  addColumnIfNotExists("users", "browser_info", "TEXT");
 
 
   // Migration for classes uniqueness (composite unique name + school_id)
@@ -1250,6 +1252,9 @@ u.id,
   addColumnIfNotExists("users", "is_super_admin", "INTEGER DEFAULT 0");
   addColumnIfNotExists("users", "is_proctoring_enabled", "INTEGER DEFAULT 0");
   addColumnIfNotExists("users", "receive_notifications", "INTEGER DEFAULT 1");
+  addColumnIfNotExists("users", "participation_status", "TEXT");
+  addColumnIfNotExists("users", "os_info", "TEXT");
+  addColumnIfNotExists("users", "browser_info", "TEXT");
   addColumnIfNotExists("lessons", "file_path", "TEXT");
   addColumnIfNotExists("exercises", "max_attempts", "INTEGER DEFAULT 0");
   addColumnIfNotExists("tests", "max_attempts", "INTEGER DEFAULT 0");
@@ -1293,7 +1298,7 @@ u.id,
     "UPDATE vocabulary SET subject = 'anh' WHERE subject = 'english' OR subject = 'Tiếng Anh' OR subject = 'English'",
   );
   db.run(
-    "UPDATE vocabulary SET type = 'speaking' WHERE type = 'reading' OR type IS NULL OR type = '' OR type NOT IN ('speaking', 'writing')",
+    "UPDATE vocabulary SET type = 'speaking' WHERE type = 'reading' OR type IS NULL OR type = '' OR type NOT IN ('speaking', 'writing') OR type LIKE '[object%' OR type LIKE '%object%'",
   );
   // Ensure pronunciation column exists
   addColumnIfNotExists("vocabulary", "pronunciation", "TEXT");
@@ -2405,6 +2410,8 @@ app.post(
   authenticateToken,
   upload.single("file"),
   async (req, res) => {
+    console.log(`💬 [/api/ai/chat] Request received from user: ${req.user?.username || 'unknown'}`);
+    fs.appendFileSync('ai-diagnostic.log', `[${new Date().toISOString()}] [/api/ai/chat] Request hit endpoint. User: ${req.user?.username || 'unknown'}\n`);
     try {
       const { message, context } = req.body;
       const filePath = req.file?.path;
@@ -5844,6 +5851,7 @@ app.get("/api/user/class-status", authenticateToken, (req, res) => {
 
 // Admin: Get student monitoring data
 app.get("/api/admin/students/monitoring", authenticateToken, (req, res) => {
+  console.log(`🔍 [Monitoring] API Call: Admin=${req.user.username}, SchoolID=${req.user.school_id}, SchoolName="${req.user.school}"`);
   if (req.user.role !== "admin" && req.user.role !== "teacher") {
     return res.status(403).json({ error: "Access denied" });
   }
@@ -5865,8 +5873,17 @@ app.get("/api/admin/students/monitoring", authenticateToken, (req, res) => {
       params.push(req.user.school_id);
     } else if (req.user.school) {
       // Fallback: If admin has no school_id but has school name, match by text
-      query += " AND (u.school_id = (SELECT id FROM schools WHERE UPPER(TRIM(name)) = UPPER(TRIM(?)) LIMIT 1) OR UPPER(TRIM(u.school)) = UPPER(TRIM(?)))";
+      // We use a more robust check that handles potential NULLs and trims whitespace
+      query += ` AND (
+        u.school_id IN (SELECT id FROM schools WHERE UPPER(TRIM(name)) = UPPER(TRIM(?))) 
+        OR UPPER(TRIM(u.school)) = UPPER(TRIM(?))
+      )`;
       params.push(req.user.school, req.user.school);
+      console.log(`🔍 [Monitoring] Non-super-admin filter by school name: "${req.user.school}"`);
+    } else {
+      // If neither school_id nor school name is present, restrict to nothing (safe default)
+      query += " AND 1=0";
+      console.warn(`⚠️ [Monitoring] Admin ${req.user.username} has no school association. Skipping results.`);
     }
   }
 

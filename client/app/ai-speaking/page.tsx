@@ -206,8 +206,9 @@ export default function AISpeakingPage() {
             speak(data.ai_response)
 
         } catch (err: any) {
-            console.error('API Error:', err)
-            setError('Lỗi kết nối AI.')
+            console.error('AI Speaking API Error:', err)
+            const errorMessage = err.response?.data?.error || err.message || 'Lỗi kết nối AI.'
+            setError(errorMessage)
         } finally {
             setIsProcessing(false)
         }

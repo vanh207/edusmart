@@ -75,9 +75,11 @@ export default function ChatbotWidget() {
         id: (Date.now() + 1).toString()
       }])
     } catch (error: any) {
+      console.error('Chatbot AI Error:', error);
+      const errorMessage = error.response?.data?.error || error.message || 'Xin lỗi, hệ thống đang bận. Bạn vui lòng thử lại sau nhé! 🙏';
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: 'Xin lỗi, hệ thống đang bận. Bạn vui lòng thử lại sau nhé! 🙏',
+        content: errorMessage,
         id: (Date.now() + 1).toString()
       }])
     } finally {
