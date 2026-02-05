@@ -700,6 +700,15 @@ if (!fs.existsSync(uploadsDir)) {
       console.log("Startup: General uploads directory cleared.");
     });
   }
+
+  // Ensure type-specific directories exist
+  ["avatars", "violations", "lessons", "questions", "feedback"].forEach(type => {
+    const typeDir = path.join(uploadsDir, type);
+    if (!fs.existsSync(typeDir)) {
+      fs.mkdirSync(typeDir, { recursive: true });
+      console.log(`Startup: Created upload directory: ${type}`);
+    }
+  });
 }
 
 // Configure multer for file uploads

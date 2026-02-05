@@ -655,6 +655,14 @@ export default function ProfilePage() {
                     </div>
                 </div>
             </div>
+            {/* Hidden File Input for Avatar */}
+            <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileChange}
+                accept="image/*"
+                className="hidden"
+            />
         </div>
     )
 }
